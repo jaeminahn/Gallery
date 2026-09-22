@@ -55,6 +55,7 @@ final class Gallery_Naver_Blog_Sync
         add_filter('upload_mimes', [self::class, 'keep_remote_images_only']);
         add_action('wp_ajax_gallery_naver_process_next', [self::class, 'handle_process_next']);
         add_action('wp_ajax_gallery_naver_refresh_page', [self::class, 'handle_refresh_page']);
+        add_action('wp_ajax_gallery_naver_fetch_thumbnails', [self::class, 'handle_fetch_thumbnails']);
         add_action('admin_post_gallery_naver_save_settings', [self::class, 'handle_save_settings']);
         add_action('admin_post_gallery_naver_retry', [self::class, 'handle_retry']);
     }
@@ -141,6 +142,12 @@ final class Gallery_Naver_Blog_Sync
                 <a class="button gallery-refresh" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=gallery_naver_refresh'), 'gallery_naver_refresh')); ?>">목록 새로고침</a>
             </div>
 
+            <div class="gallery-sync-notices">
+            <?php if (is_array($notice)) : ?>
+                <div class="notice notice-<?php echo $notice['errors'] ? 'warning' : 'success'; ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
+            <?php endif; ?>
+            </div>
+
             <section class="gallery-sync-section gallery-sync-settings">
                 <div class="gallery-sync-heading"><div><h2>AI 재작성 설정</h2></div></div>
                 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -197,10 +204,6 @@ final class Gallery_Naver_Blog_Sync
             </div>
             <?php if ($paused) : ?>
                 <div class="notice notice-warning"><p>네이버가 요청을 일시 제한했습니다. 약 30분 후에 자동으로 재개됩니다.</p></div>
-            <?php endif; ?>
-
-            <?php if (is_array($notice)) : ?>
-                <div class="notice <?php echo $notice['errors'] ? 'notice-warning' : 'notice-success'; ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
             <?php endif; ?>
 
             <?php if ($result['error']) : ?>
@@ -287,6 +290,7 @@ final class Gallery_Naver_Blog_Sync
             const text = document.getElementById('gallery-sync-progress-text');
             const nonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_process')); ?>;
             const listNonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_refresh_page')); ?>;
+            const thumbnailNonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_fetch_thumbnails')); ?>;
             const listComplete = <?php echo $result['complete'] ? 'true' : 'false'; ?>;
             const listProgress = document.getElementById('gallery-list-progress');
             const listFill = document.getElementById('gallery-list-progress-fill');
@@ -377,6 +381,44 @@ final class Gallery_Naver_Blog_Sync
             if (!listComplete) {
                 refreshListPage();
                 document.addEventListener('visibilitychange', refreshListPage, { once: true });
+            } else {
+                hydrateThumbnails();
+            }
+
+            async function hydrateThumbnails() {
+                const items = Array.from(document.querySelectorAll('.gallery-sync-thumb[data-needs-thumbnail="1"]'));
+                for (let index = 0; index < items.length; index += 5) {
+                    const batch = items.slice(index, index + 5);
+                    const ids = batch.map((item) => item.dataset.logNo);
+                    try {
+                        const res = await fetch(ajaxurl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({
+                                action: 'gallery_naver_fetch_thumbnails',
+                                _ajax_nonce: thumbnailNonce,
+                                log_nos: ids.join(','),
+                            }),
+                        });
+                        const json = await res.json();
+                        if (!json.success) continue;
+                        batch.forEach((item) => {
+                            const url = json.data.thumbnails[item.dataset.logNo];
+                            if (!url) return;
+                            const image = document.createElement('img');
+                            image.alt = '';
+                            image.loading = 'lazy';
+                            image.decoding = 'async';
+                            image.referrerPolicy = 'no-referrer';
+                            image.addEventListener('error', () => image.remove());
+                            image.src = url;
+                            item.replaceChildren(image);
+                            item.dataset.needsThumbnail = '0';
+                        });
+                    } catch (error) {
+                        // Keep the accessible placeholder and continue with the next batch.
+                    }
+                }
             }
         })();
         </script>
@@ -386,6 +428,7 @@ final class Gallery_Naver_Blog_Sync
     private static function render_row(array $post, bool $selectable): void
     {
         $source_url = self::source_url($post['log_no']);
+        $thumbnail = self::normalize_image_url((string) ($post['thumbnail'] ?? ''));
         ?>
         <article class="gallery-sync-row">
             <?php if ($selectable) : ?>
@@ -393,8 +436,8 @@ final class Gallery_Naver_Blog_Sync
             <?php else : ?>
                 <span class="gallery-sync-status">완료</span>
             <?php endif; ?>
-            <div class="gallery-sync-thumb">
-                <?php if ($post['thumbnail']) : ?><img src="<?php echo esc_url($post['thumbnail']); ?>" alt="" referrerpolicy="no-referrer"><?php else : ?><span class="dashicons dashicons-format-image"></span><?php endif; ?>
+            <div class="gallery-sync-thumb" data-log-no="<?php echo esc_attr($post['log_no']); ?>" data-needs-thumbnail="<?php echo $thumbnail ? '0' : '1'; ?>">
+                <?php if ($thumbnail) : ?><img src="<?php echo esc_url($thumbnail); ?>" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><?php else : ?><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="screen-reader-text">대표 이미지 불러오는 중</span><?php endif; ?>
             </div>
             <div class="gallery-sync-info">
                 <h3><?php echo esc_html($post['title']); ?></h3>
@@ -497,6 +540,47 @@ final class Gallery_Naver_Blog_Sync
             'total' => count($posts),
             'page' => $page,
         ]);
+    }
+
+    public static function handle_fetch_thumbnails(): void
+    {
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => '권한이 없습니다.'], 403);
+        }
+        check_ajax_referer('gallery_naver_fetch_thumbnails');
+
+        $raw_ids = explode(',', (string) wp_unslash($_POST['log_nos'] ?? ''));
+        $log_numbers = array_slice(array_values(array_unique(array_filter(array_map(
+            static fn($id): string => preg_replace('/\D/', '', $id),
+            $raw_ids,
+        )))), 0, 5);
+        if (! $log_numbers) {
+            wp_send_json_success(['thumbnails' => []]);
+        }
+
+        $state = self::get_remote_posts();
+        $wanted = array_fill_keys($log_numbers, true);
+        $thumbnails = [];
+        foreach ($state['posts'] as &$post) {
+            $log_no = (string) ($post['log_no'] ?? '');
+            if (! isset($wanted[$log_no])) {
+                continue;
+            }
+            $thumbnail = self::normalize_image_url((string) ($post['thumbnail'] ?? ''));
+            if (! $thumbnail) {
+                $thumbnail = self::fetch_remote_thumbnail($log_no);
+                if ($thumbnail) {
+                    $post['thumbnail'] = $thumbnail;
+                }
+            }
+            if ($thumbnail) {
+                $thumbnails[$log_no] = $thumbnail;
+            }
+        }
+        unset($post);
+        update_option(self::LIST_OPTION, $state, false);
+
+        wp_send_json_success(['thumbnails' => $thumbnails]);
     }
 
     public static function handle_process_next(): void
@@ -1196,6 +1280,22 @@ PROMPT;
         return self::normalize_image_url($source);
     }
 
+    private static function fetch_remote_thumbnail(string $log_no): string
+    {
+        $response = self::request(self::source_url($log_no), 0.35);
+        if (is_wp_error($response)) {
+            return '';
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        if (! preg_match('/<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']/i', $body, $match)
+            && ! preg_match('/<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']/i', $body, $match)) {
+            return '';
+        }
+
+        return self::normalize_image_url(html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
     private static function normalize_image_url(string $url): string
     {
         $url = html_entity_decode(trim($url));
@@ -1309,6 +1409,11 @@ PROMPT;
 .gallery-sync-settings .form-table th,
 .gallery-sync-settings label { color: #1d2327; }
 .gallery-sync-admin .gallery-sync-hero h1 { color: #fff; }
+.gallery-sync-notices .notice { margin: 18px 0 0; border: 1px solid #dcdcda; border-left-width: 1px; border-radius: 12px; background: #fff; box-shadow: none; }
+.gallery-sync-notices .notice-success { border-color: #171712; }
+.gallery-sync-notices .notice-success p { color: #171712; font-weight: 600; }
+.gallery-sync-notices .notice-warning { border-color: #a3691c; background: #fdf7ec; }
+.gallery-sync-notices .notice-warning p { color: #7a4d12; }
 .gallery-sync-hero .gallery-refresh,
 .gallery-sync-hero .gallery-refresh:hover,
 .gallery-sync-hero .gallery-refresh:focus { border-color: #d7ff57; background: #d7ff57; color: #171712; font-weight: 700; }
