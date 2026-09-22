@@ -498,6 +498,30 @@ final class Gallery_Naver_Blog_Sync
         ]);
     }
 
+    private static function pending_count(): int
+    {
+        return count(array_filter(
+            self::normalize_queue((array) get_option(self::QUEUE_OPTION, [])),
+            fn($item) => $item['status'] === 'pending',
+        ));
+    }
+
+    private static function normalize_queue(array $queue): array
+    {
+        $normalized = [];
+        foreach ($queue as $item) {
+            if (is_string($item)) {
+                $item = ['log_no' => $item, 'attempts' => 0, 'status' => 'pending', 'error' => ''];
+            }
+            $item = wp_parse_args($item, ['log_no' => '', 'attempts' => 0, 'status' => 'pending', 'error' => '']);
+            if ($item['log_no'] !== '' && ! isset($normalized[$item['log_no']])) {
+                $normalized[$item['log_no']] = $item;
+            }
+        }
+
+        return array_values($normalized);
+    }
+
     public static function handle_sync(): void
     {
         self::assert_admin_request('gallery_naver_sync');
