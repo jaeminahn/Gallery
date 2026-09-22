@@ -119,8 +119,8 @@ final class Gallery_Naver_Blog_Sync
 
             <?php
             $queue_count = count((array) get_option(self::QUEUE_OPTION, []));
-            $paused = (bool) get_transient('gallery_naver_sync_paused');
-            ?>
+        $paused = (bool) get_transient('gallery_naver_sync_paused');
+        ?>
             <?php if ($queue_count > 0) : ?>
                 <div class="notice notice-info"><p>동기화 대기 중인 글이 <?php echo esc_html($queue_count); ?>개 있습니다. 2분 간격으로 자동 게시됩니다.</p></div>
             <?php endif; ?>

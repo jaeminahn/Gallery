@@ -146,8 +146,8 @@ add_filter('wp_robots', function ($robots) {
     return $robots;
 });
 
-add_filter('excerpt_more', fn () => '…');
-add_filter('excerpt_length', fn () => 60);
+add_filter('excerpt_more', fn() => '…');
+add_filter('excerpt_length', fn() => 60);
 
 function gallery_lighting_admin_assets(): void
 {
@@ -163,4 +163,4 @@ function gallery_lighting_admin_favicon(): void
 add_action('admin_head', 'gallery_lighting_admin_favicon');
 add_action('login_head', 'gallery_lighting_admin_favicon');
 
-add_filter('admin_footer_text', fn () => '갤러리조명 — 빛이 머무는 공간을 짓습니다');
+add_filter('admin_footer_text', fn() => '갤러리조명 — 빛이 머무는 공간을 짓습니다');
