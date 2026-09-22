@@ -151,7 +151,7 @@ add_filter('excerpt_length', fn() => 60);
 
 function gallery_lighting_admin_assets(): void
 {
-    wp_enqueue_style('gallery-lighting-admin', get_template_directory_uri() . '/assets/css/admin.css', [], '1.1.0');
+    wp_enqueue_style('gallery-lighting-admin', get_template_directory_uri() . '/assets/css/admin.css', [], '1.1.1');
 }
 add_action('admin_enqueue_scripts', 'gallery_lighting_admin_assets');
 add_action('login_enqueue_scripts', 'gallery_lighting_admin_assets');
@@ -164,3 +164,5 @@ add_action('admin_head', 'gallery_lighting_admin_favicon');
 add_action('login_head', 'gallery_lighting_admin_favicon');
 
 add_filter('admin_footer_text', fn() => '갤러리조명 — 빛이 머무는 공간을 짓습니다');
+
+add_filter('roots/bedrock/disallow_indexing_admin_notice', '__return_false');

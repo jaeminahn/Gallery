@@ -7,6 +7,10 @@
   --muted: #6f6b64;
   --paper: #faf9f6;
   --line: rgba(22, 21, 19, .14);
+  --admin-nav: #171712;
+  --admin-nav-raised: #292923;
+  --admin-accent: #d7ff57;
+  --admin-link: #135e96;
 }
 
 body {
@@ -16,17 +20,22 @@ body {
 }
 
 /* 사이드바 */
-#adminmenuback, #adminmenuwrap { background: var(--ink); }
-#adminmenu a { color: rgba(255, 255, 255, .72); transition: color .2s; }
-#adminmenu a:hover, #adminmenu li.menu-top:hover, #adminmenu li.opensub > a.menu-top, #adminmenu li > a.current:focus { color: #fff; background: rgba(255, 255, 255, .06); }
-#adminmenu li.current > a.current, #adminmenu li.wp-has-current-submenu > a.wp-has-current-submenu { background: #fff; color: var(--ink); font-weight: 600; }
-#adminmenu .wp-submenu { background: rgba(255, 255, 255, .04); }
-#adminmenu .wp-has-current-submenu .wp-submenu { background: rgba(255, 255, 255, .06); }
-#adminmenu .wp-submenu a { color: rgba(255, 255, 255, .65); }
-#adminmenu .wp-submenu a:hover, #adminmenu .wp-submenu li.current a { color: #fff; }
+#adminmenuback, #adminmenuwrap, #adminmenu { background: var(--admin-nav); }
+#adminmenu a { color: #d4d4ce; transition: color .2s, background-color .2s; }
+#adminmenu div.wp-menu-image::before { color: #b8b8b1; transition: color .2s; }
+#adminmenu a:hover, #adminmenu li.menu-top:hover > a, #adminmenu li.opensub > a.menu-top, #adminmenu li > a.current:focus { color: #fff; background: #30302a; }
+#adminmenu a:hover div.wp-menu-image::before, #adminmenu li.opensub div.wp-menu-image::before { color: #fff; }
+#adminmenu li.current > a.current, #adminmenu li.wp-has-current-submenu > a.wp-has-current-submenu { background: var(--admin-accent); color: var(--admin-nav); font-weight: 700; }
+#adminmenu li.current > a.current div.wp-menu-image::before, #adminmenu li.wp-has-current-submenu > a.wp-has-current-submenu div.wp-menu-image::before { color: var(--admin-nav); }
+#adminmenu .wp-submenu, #adminmenu .wp-has-current-submenu .wp-submenu { background: var(--admin-nav-raised); }
+#adminmenu .wp-submenu a { color: #d4d4ce; }
+#adminmenu .wp-submenu a:hover, #adminmenu .wp-submenu li.current a { background: #35352f; color: #fff; }
+#adminmenu .wp-submenu li.current a { box-shadow: inset 3px 0 var(--admin-accent); font-weight: 600; }
 #adminmenu .wp-has-current-submenu ul > li > a, .folded #adminmenu li.menu-top .wp-submenu > li > a { padding-left: 20px; }
-#adminmenu li.wp-has-submenu.wp-not-current-submenu.opensub:hover:after { border-right-color: var(--ink); }
-#adminmenu .awaiting-mod, #adminmenu .update-plugins { background: var(--ink); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+#adminmenu li.wp-has-submenu.wp-not-current-submenu.opensub:hover:after { border-right-color: var(--admin-nav-raised); }
+#adminmenu .awaiting-mod, #adminmenu .update-plugins { background: var(--admin-accent); color: var(--admin-nav); border: 0; }
+#collapse-menu { color: #c7c7c0; }
+#collapse-menu:hover, #collapse-menu:hover #collapse-button div::after { color: #fff; }
 
 /* 상단 툴바 */
 #wpadminbar { background: var(--ink); color: rgba(255, 255, 255, .75); }
@@ -48,13 +57,17 @@ body {
 .wp-core-ui .button-primary:hover, .wp-core-ui .button-primary:focus { background: var(--ink); color: #fff; opacity: .85; box-shadow: none; }
 
 /* 링크, 폼 */
-a { color: var(--ink); }
-a:hover { color: var(--muted); }
+#wpbody-content a:not(.button):not(.page-title-action) { color: var(--admin-link); }
+#wpbody-content a:not(.button):not(.page-title-action):hover { color: #0a4b78; text-decoration: underline; }
+#wpbody-content a:focus, #adminmenu a:focus, #wpadminbar a:focus { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--admin-link); outline: 0; }
 #wpbody input[type="text"], #wpbody input[type="password"], #wpbody input[type="search"],
 #wpbody input[type="email"], #wpbody input[type="url"], #wpbody select, #wpbody textarea {
-  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  border: 1px solid #8c8f94; border-radius: 8px; background: #fff; color: #1d2327;
 }
 #wpbody input:focus, #wpbody select:focus, #wpbody textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+#wpbody input[type="checkbox"], #wpbody input[type="radio"] { accent-color: var(--ink); }
+#wpbody input::placeholder { color: #646970; opacity: 1; }
+.wp-core-ui .button[disabled], .wp-core-ui .button.disabled { border-color: #dcdcda !important; background: #f0f0ed !important; color: #777 !important; opacity: 1; }
 
 /* 알림 메시지 */
 .notice { border-radius: 8px; border-left-width: 1px; }

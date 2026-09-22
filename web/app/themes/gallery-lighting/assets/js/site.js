@@ -30,3 +30,76 @@ document.querySelectorAll(".faq-item button").forEach((button) => {
     answer.style.maxHeight = open ? `${answer.scrollHeight}px` : "0px";
   });
 });
+
+// Contact section: interactive dot field that glows around the cursor.
+(function () {
+  const canvas = document.getElementById("contact-dots");
+  if (!canvas) return;
+
+  const context = canvas.getContext("2d");
+  const section = canvas.closest(".contact");
+  let dots = [];
+  let width = 0;
+  let height = 0;
+  let visible = false;
+  const mouse = { x: -9999, y: -9999 };
+  const GLOW_RADIUS = 190;
+
+  function resize() {
+    const rect = section.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = rect.width;
+    height = rect.height;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    dots = [];
+    const gap = 42;
+    for (let y = gap / 2; y < height; y += gap) {
+      for (let x = gap / 2; x < width; x += gap) {
+        dots.push({ x, y });
+      }
+    }
+  }
+
+  function draw() {
+    context.clearRect(0, 0, width, height);
+    for (const dot of dots) {
+      const dx = dot.x - mouse.x;
+      const dy = dot.y - mouse.y;
+      const distance = Math.hypot(dx, dy);
+      const strength = Math.max(0, 1 - distance / GLOW_RADIUS);
+      const radius = 1 + strength * 2.4;
+      const alpha = 0.16 + strength * 0.84;
+
+      context.beginPath();
+      context.arc(dot.x, dot.y, radius, 0, Math.PI * 2);
+      context.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+      context.fill();
+    }
+  }
+
+  function loop() {
+    if (visible) draw();
+    requestAnimationFrame(loop);
+  }
+
+  section.addEventListener("pointermove", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = event.clientX - rect.left;
+    mouse.y = event.clientY - rect.top;
+  });
+  section.addEventListener("pointerleave", () => {
+    mouse.x = -9999;
+    mouse.y = -9999;
+  });
+
+  new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+  }, { rootMargin: "80px" }).observe(section);
+
+  window.addEventListener("resize", resize);
+  resize();
+  loop();
+})();
