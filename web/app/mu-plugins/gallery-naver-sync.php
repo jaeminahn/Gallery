@@ -24,11 +24,7 @@ final class Gallery_Naver_Blog_Sync
 
     private const QUEUE_OPTION = 'gallery_naver_sync_queue';
 
-    private const CRON_HOOK = 'gallery_naver_sync_queue_cron';
-
     private const MIN_REQUEST_INTERVAL = 2.5;
-
-    private const BATCH_SIZE = 3;
 
     private const BLOCK_PAUSE = 30 * MINUTE_IN_SECONDS;
 
@@ -41,9 +37,7 @@ final class Gallery_Naver_Blog_Sync
         add_action('admin_post_gallery_naver_refresh', [self::class, 'handle_refresh']);
         add_action('admin_enqueue_scripts', [self::class, 'admin_assets']);
         add_filter('upload_mimes', [self::class, 'keep_remote_images_only']);
-        add_action(self::CRON_HOOK, [self::class, 'process_queue']);
-        add_filter('cron_schedules', [self::class, 'register_cron_schedule']);
-        add_action('init', [self::class, 'schedule_cron']);
+        add_action('wp_ajax_gallery_naver_process_next', [self::class, 'handle_process_next']);
     }
 
     public static function register_menu(): void
@@ -121,9 +115,10 @@ final class Gallery_Naver_Blog_Sync
             $queue_count = count((array) get_option(self::QUEUE_OPTION, []));
         $paused = (bool) get_transient('gallery_naver_sync_paused');
         ?>
-            <?php if ($queue_count > 0) : ?>
-                <div class="notice notice-info"><p>동기화 대기 중인 글이 <?php echo esc_html($queue_count); ?>개 있습니다. 2분 간격으로 자동 게시됩니다.</p></div>
-            <?php endif; ?>
+            <div id="gallery-sync-progress" class="gallery-sync-progress" hidden>
+                <div class="gallery-sync-progress-bar"><span id="gallery-sync-progress-fill"></span></div>
+                <p id="gallery-sync-progress-text"></p>
+            </div>
             <?php if ($paused) : ?>
                 <div class="notice notice-warning"><p>네이버가 요청을 일시 제한했습니다. 약 30분 후에 자동으로 재개됩니다.</p></div>
             <?php endif; ?>
@@ -175,9 +170,67 @@ final class Gallery_Naver_Blog_Sync
             </section>
         </div>
         <script>
-        document.querySelector('[data-gallery-select-all]')?.addEventListener('change', function () {
-            document.querySelectorAll('input[name="post_ids[]"]').forEach((input) => input.checked = this.checked);
-        });
+        (function () {
+            const selectAll = document.querySelector('[data-gallery-select-all]');
+            selectAll?.addEventListener('change', function () {
+                document.querySelectorAll('input[name="post_ids[]"]').forEach((input) => input.checked = this.checked);
+            });
+
+            const progress = document.getElementById('gallery-sync-progress');
+            const fill = document.getElementById('gallery-sync-progress-fill');
+            const text = document.getElementById('gallery-sync-progress-text');
+            const nonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_process')); ?>;
+            let total = <?php echo esc_js($queue_count); ?>;
+            let processed = 0;
+            let running = false;
+
+            async function tick() {
+                if (document.hidden || running) return;
+                running = true;
+                try {
+                    const res = await fetch(ajaxurl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'gallery_naver_process_next', _ajax_nonce: nonce }),
+                    });
+                    const json = await res.json();
+                    if (!json.success) return;
+
+                    const data = json.data;
+                    if (data.status === 'empty') {
+                        if (processed > 0) window.location.reload();
+                        return;
+                    }
+                    if (data.status === 'paused') {
+                        text.textContent = '네이버가 요청을 일시 제한했습니다. 약 30분 후에 이 페이지를 새로고침하면 이어서 진행됩니다.';
+                        fill.style.width = '100%';
+                        return;
+                    }
+
+                    processed++;
+                    const done = total - data.remaining;
+                    progress.hidden = false;
+                    fill.style.width = (total ? Math.round(done / total * 100) : 100) + '%';
+                    const label = { done: '게시 완료', skipped: '이미 게시됨', error: '실패' }[data.status] || data.status;
+                    text.textContent = label + ' (' + done + '/' + total + ')' + (data.message ? ' — ' + data.message : '');
+
+                    if (data.remaining > 0 && data.status !== 'error') {
+                        setTimeout(tick, 500);
+                    } else {
+                        window.location.reload();
+                    }
+                } finally {
+                    running = false;
+                }
+            }
+
+            if (total > 0) {
+                progress.hidden = false;
+                text.textContent = '동기화를 진행합니다. 이 탭을 열어 둔 상태로 두세요.';
+                tick();
+                document.addEventListener('visibilitychange', tick);
+            }
+        })();
         </script>
         <?php
     }
@@ -244,56 +297,47 @@ final class Gallery_Naver_Blog_Sync
         exit;
     }
 
-    public static function schedule_cron(): void
+    public static function handle_process_next(): void
     {
-        if (! wp_next_scheduled(self::CRON_HOOK)) {
-            wp_schedule_event(time() + 120, 'gallery_naver_every_2min', self::CRON_HOOK);
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => '권한이 없습니다.'], 403);
         }
-    }
+        check_ajax_referer('gallery_naver_process');
 
-    public static function register_cron_schedule($schedules)
-    {
-        $schedules['gallery_naver_every_2min'] = [
-            'interval' => 120,
-            'display' => '네이버 동기화 2분 간격',
-        ];
-
-        return $schedules;
-    }
-
-    public static function process_queue(): void
-    {
         if (get_transient('gallery_naver_sync_paused')) {
-            return;
+            wp_send_json_success(['status' => 'paused', 'remaining' => count((array) get_option(self::QUEUE_OPTION, []))]);
         }
 
         $queue = array_values(array_filter((array) get_option(self::QUEUE_OPTION, [])));
         if (! $queue) {
-            return;
+            wp_send_json_success(['status' => 'empty', 'remaining' => 0]);
         }
 
-        $done = 0;
-        foreach ($queue as $index => $log_no) {
-            if ($done >= self::BATCH_SIZE) {
-                break;
-            }
-
-            if (self::find_existing_post($log_no)) {
-                unset($queue[$index]);
-                continue;
-            }
-
-            $result = self::sync_post($log_no);
-            unset($queue[$index]);
-            $done++;
-
-            if (is_wp_error($result) && self::is_blocked_error($result)) {
-                set_transient('gallery_naver_sync_paused', time(), self::BLOCK_PAUSE);
-                break;
-            }
-        }
-
+        $log_no = $queue[0];
+        unset($queue[0]);
         update_option(self::QUEUE_OPTION, array_values($queue), false);
+
+        if (self::find_existing_post($log_no)) {
+            wp_send_json_success(['status' => 'skipped', 'log_no' => $log_no, 'remaining' => count($queue)]);
+        }
+
+        $result = self::sync_post($log_no);
+        if (is_wp_error($result)) {
+            if (self::is_blocked_error($result)) {
+                set_transient('gallery_naver_sync_paused', time(), self::BLOCK_PAUSE);
+                wp_send_json_success(['status' => 'paused', 'remaining' => count($queue)]);
+            }
+            wp_send_json_success(['status' => 'error', 'log_no' => $log_no, 'message' => $result->get_error_message(), 'remaining' => count($queue)]);
+        }
+
+        delete_transient(self::CACHE_KEY);
+        wp_send_json_success([
+            'status' => 'done',
+            'log_no' => $log_no,
+            'post_id' => (int) $result,
+            'edit_url' => get_edit_post_link((int) $result, 'raw'),
+            'remaining' => count($queue),
+        ]);
     }
 
     private static function is_blocked_error(WP_Error $error): bool
@@ -327,9 +371,8 @@ final class Gallery_Naver_Blog_Sync
             $selected,
         )));
         update_option(self::QUEUE_OPTION, $queue, false);
-        self::schedule_cron();
 
-        $message = sprintf('%d개 글을 동기화 대기열에 추가했습니다. 한 번에 %d개씩, 약 2분 간격으로 자동 게시됩니다.', count($selected), self::BATCH_SIZE);
+        $message = sprintf('%d개 글을 동기화 대기열에 추가했습니다. 이 페이지를 열어 둔 동안 자동으로 게시됩니다.', count($selected));
         self::set_notice($message, 0);
         wp_safe_redirect(self::admin_url());
         exit;
@@ -723,7 +766,7 @@ final class Gallery_Naver_Blog_Sync
 
     private static function admin_css(): string
     {
-        return '.gallery-sync-admin{max-width:1200px}.gallery-sync-hero{display:flex;justify-content:space-between;gap:32px;align-items:flex-end;margin:28px 0;padding:32px;border-radius:18px;background:#171712;color:#fff}.gallery-sync-hero h1{margin:8px 0 6px;color:#fff;font-size:34px}.gallery-sync-hero p{max-width:680px;margin:0;color:#babaae}.gallery-sync-kicker{color:#d7ff57;font-weight:700}.gallery-sync-hero .gallery-refresh{border-color:#d7ff57;background:#d7ff57;color:#171712}.gallery-sync-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.gallery-sync-summary div{display:flex;align-items:baseline;gap:12px;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-summary strong{font-size:30px}.gallery-sync-summary span{color:#64645d}.gallery-sync-section{margin-top:22px;padding:26px;border:1px solid #dcdcda;border-radius:18px;background:#fff}.gallery-sync-heading h2{margin:0;font-size:24px}.gallery-sync-heading p{margin:5px 0 0;color:#6b6b64}.gallery-sync-toolbar{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;padding:12px 16px;border-radius:10px;background:#f5f5f1}.gallery-sync-list{border-top:1px solid #e4e4df}.gallery-sync-row{display:grid;grid-template-columns:34px 90px minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 6px;border-bottom:1px solid #e4e4df}.gallery-sync-check input{width:18px;height:18px}.gallery-sync-thumb{width:90px;height:68px;overflow:hidden;border-radius:8px;background:#efefe9}.gallery-sync-thumb img{width:100%;height:100%;object-fit:cover}.gallery-sync-thumb .dashicons{display:grid;width:100%;height:100%;place-items:center;color:#aaa}.gallery-sync-info h3{margin:0 0 7px;font-size:15px}.gallery-sync-meta{display:flex;gap:14px;color:#77776f;font-size:12px}.gallery-sync-actions{display:flex;gap:10px;white-space:nowrap}.gallery-sync-status{display:inline-flex;justify-content:center;padding:4px 7px;border-radius:999px;background:#eaffaa;color:#314000;font-size:11px;font-weight:700}.gallery-empty{margin-top:20px;padding:30px;border-radius:12px;background:#f6f6f2;color:#777;text-align:center}.gallery-sync-pagination{display:flex;flex-wrap:wrap;gap:5px;margin-top:20px}.gallery-sync-pagination .page-numbers{display:grid;min-width:34px;height:34px;padding:0 9px;place-items:center;border:1px solid #dcdcda;border-radius:7px;text-decoration:none}.gallery-sync-pagination .current{border-color:#171712;background:#171712;color:#fff}@media(max-width:782px){.gallery-sync-hero{display:block}.gallery-sync-hero .button{margin-top:18px}.gallery-sync-summary{grid-template-columns:1fr}.gallery-sync-row{grid-template-columns:28px 70px 1fr}.gallery-sync-thumb{width:70px;height:54px}.gallery-sync-actions{grid-column:3}.gallery-sync-meta{display:block}}';
+        return '.gallery-sync-admin{max-width:1200px}.gallery-sync-hero{display:flex;justify-content:space-between;gap:32px;align-items:flex-end;margin:28px 0;padding:32px;border-radius:18px;background:#171712;color:#fff}.gallery-sync-hero h1{margin:8px 0 6px;color:#fff;font-size:34px}.gallery-sync-hero p{max-width:680px;margin:0;color:#babaae}.gallery-sync-kicker{color:#d7ff57;font-weight:700}.gallery-sync-hero .gallery-refresh{border-color:#d7ff57;background:#d7ff57;color:#171712}.gallery-sync-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.gallery-sync-summary div{display:flex;align-items:baseline;gap:12px;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-summary strong{font-size:30px}.gallery-sync-summary span{color:#64645d}.gallery-sync-section{margin-top:22px;padding:26px;border:1px solid #dcdcda;border-radius:18px;background:#fff}.gallery-sync-heading h2{margin:0;font-size:24px}.gallery-sync-heading p{margin:5px 0 0;color:#6b6b64}.gallery-sync-toolbar{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;padding:12px 16px;border-radius:10px;background:#f5f5f1}.gallery-sync-list{border-top:1px solid #e4e4df}.gallery-sync-row{display:grid;grid-template-columns:34px 90px minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 6px;border-bottom:1px solid #e4e4df}.gallery-sync-check input{width:18px;height:18px}.gallery-sync-thumb{width:90px;height:68px;overflow:hidden;border-radius:8px;background:#efefe9}.gallery-sync-thumb img{width:100%;height:100%;object-fit:cover}.gallery-sync-thumb .dashicons{display:grid;width:100%;height:100%;place-items:center;color:#aaa}.gallery-sync-info h3{margin:0 0 7px;font-size:15px}.gallery-sync-meta{display:flex;gap:14px;color:#77776f;font-size:12px}.gallery-sync-actions{display:flex;gap:10px;white-space:nowrap}.gallery-sync-status{display:inline-flex;justify-content:center;padding:4px 7px;border-radius:999px;background:#eaffaa;color:#314000;font-size:11px;font-weight:700}.gallery-sync-progress{margin:22px 0;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-progress-bar{height:8px;overflow:hidden;border-radius:999px;background:#efefe9}.gallery-sync-progress-bar span{display:block;height:100%;width:0;border-radius:999px;background:#171712;transition:width .4s ease}.gallery-sync-progress p{margin:12px 0 0;color:#6b6b64}.gallery-empty{margin-top:20px;padding:30px;border-radius:12px;background:#f6f6f2;color:#777;text-align:center}.gallery-sync-pagination{display:flex;flex-wrap:wrap;gap:5px;margin-top:20px}.gallery-sync-pagination .page-numbers{display:grid;min-width:34px;height:34px;padding:0 9px;place-items:center;border:1px solid #dcdcda;border-radius:7px;text-decoration:none}.gallery-sync-pagination .current{border-color:#171712;background:#171712;color:#fff}@media(max-width:782px){.gallery-sync-hero{display:block}.gallery-sync-hero .button{margin-top:18px}.gallery-sync-summary{grid-template-columns:1fr}.gallery-sync-row{grid-template-columns:28px 70px 1fr}.gallery-sync-thumb{width:70px;height:54px}.gallery-sync-actions{grid-column:3}.gallery-sync-meta{display:block}}';
     }
 }
 
