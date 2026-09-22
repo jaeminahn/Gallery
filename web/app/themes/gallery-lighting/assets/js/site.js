@@ -7,19 +7,18 @@ updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
 
 if (!reduceMotion) {
-  animate(".hero .eyebrow, .hero h1, .hero-lead, .hero-actions", { opacity: [0, 1], y: [34, 0] }, { duration: .85, delay: stagger(.09), ease: [.22, 1, .36, 1] });
-  animate(".hero-media img", { scale: [1.09, 1.03] }, { duration: 1.8, ease: [.22, 1, .36, 1] });
+  animate(".hero [data-hero], .hero h1", { opacity: [0, 1], y: [30, 0] }, { duration: .9, delay: stagger(.1), ease: [.22, 1, .36, 1] });
+  animate(".hero-media img", { scale: [1.06, 1] }, { duration: 2, ease: [.22, 1, .36, 1] });
+
+  scroll(animate(".hero-media img", { y: ["0%", "10%"] }), { target: document.querySelector(".hero"), offset: ["start start", "end start"] });
 
   inView("[data-reveal]", (element) => {
-    animate(element, { opacity: [0, 1], y: [28, 0] }, { duration: .75, ease: [.22, 1, .36, 1] });
+    animate(element, { opacity: [0, 1], y: [26, 0] }, { duration: .8, ease: [.22, 1, .36, 1] });
   }, { margin: "0px 0px -10% 0px" });
 
   inView("[data-stagger]", (element) => {
-    animate(Array.from(element.children), { opacity: [0, 1], y: [24, 0] }, { duration: .65, delay: stagger(.08), ease: [.22, 1, .36, 1] });
+    animate(Array.from(element.children), { opacity: [0, 1], y: [22, 0] }, { duration: .7, delay: stagger(.09), ease: [.22, 1, .36, 1] });
   }, { margin: "0px 0px -8% 0px" });
-
-  const glow = document.querySelector(".service-glow");
-  if (glow) scroll(animate(glow, { y: [-40, 120], scale: [.9, 1.2] }), { target: glow.closest(".service-card"), offset: ["start end", "end start"] });
 }
 
 document.querySelectorAll(".faq-item button").forEach((button) => {

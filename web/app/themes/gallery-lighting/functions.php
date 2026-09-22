@@ -90,8 +90,77 @@ function gallery_lighting_faq_schema(): array
     ], $faqs);
 }
 
-function gallery_lighting_excerpt_length(): int
+function gallery_lighting_post_image(?int $post_id = null): string
 {
-    return 26;
+    $post_id = $post_id ?: get_the_ID();
+    if (has_post_thumbnail($post_id)) {
+        return (string) get_the_post_thumbnail_url($post_id, 'large');
+    }
+
+    $remote_image = (string) get_post_meta($post_id, '_gallery_naver_first_image', true);
+    if (wp_http_validate_url($remote_image)) {
+        return $remote_image;
+    }
+
+    return get_template_directory_uri() . '/assets/images/barrisol-hero.png';
 }
-add_filter('excerpt_length', 'gallery_lighting_excerpt_length');
+
+function gallery_lighting_og_meta(): void
+{
+    $title = is_front_page() ? '울산 갤러리조명 | 바리솔 · LED 조명 전문 시공' : wp_get_document_title();
+    $description = is_front_page()
+        ? '울산 갤러리조명은 바리솔 조명, LED 엣지등, 해외 수입 식탁등, 병원과 은행 및 기관 조명을 전문 시공합니다. 부산 울산 경남 출장 상담 010-4588-8709'
+        : get_the_excerpt();
+    $image = get_template_directory_uri() . '/assets/images/barrisol-hero.png';
+
+    if (is_singular()) {
+        $image = gallery_lighting_post_image();
+    }
+
+    echo '<meta property="og:type" content="' . (is_singular() ? 'article' : 'website') . '">' . "\n";
+    echo '<meta property="og:title" content="' . esc_attr($title) . '">' . "\n";
+    echo '<meta property="og:description" content="' . esc_attr($description) . '">' . "\n";
+    echo '<meta property="og:url" content="' . esc_url(home_url(add_query_arg(null, null))) . '">' . "\n";
+    echo '<meta property="og:site_name" content="갤러리조명">' . "\n";
+    echo '<meta property="og:image" content="' . esc_url($image) . '">' . "\n";
+    echo '<meta property="og:locale" content="ko_KR">' . "\n";
+    echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
+}
+add_action('wp_head', 'gallery_lighting_og_meta', 5);
+
+add_filter('wp_sitemaps_add_provider', function ($provider, $name) {
+    return $name === 'users' ? false : $provider;
+}, 10, 2);
+
+add_filter('wp_sitemaps_posts_entry', function ($entry, $post) {
+    if ($post->post_type === 'post') {
+        $entry['lastmod'] = get_the_modified_date('c', $post);
+    }
+    return $entry;
+}, 10, 2);
+
+add_filter('wp_robots', function ($robots) {
+    if (is_search() || is_404()) {
+        $robots['noindex'] = true;
+    }
+    return $robots;
+});
+
+add_filter('excerpt_more', fn () => '…');
+add_filter('excerpt_length', fn () => 60);
+
+function gallery_lighting_admin_assets(): void
+{
+    wp_enqueue_style('gallery-lighting-admin', get_template_directory_uri() . '/assets/css/admin.css', [], '1.1.0');
+}
+add_action('admin_enqueue_scripts', 'gallery_lighting_admin_assets');
+add_action('login_enqueue_scripts', 'gallery_lighting_admin_assets');
+
+function gallery_lighting_admin_favicon(): void
+{
+    echo '<link rel="icon" href="' . esc_url(get_template_directory_uri() . '/assets/images/barrisol-hero.png') . '">' . "\n";
+}
+add_action('admin_head', 'gallery_lighting_admin_favicon');
+add_action('login_head', 'gallery_lighting_admin_favicon');
+
+add_filter('admin_footer_text', fn () => '갤러리조명 — 빛이 머무는 공간을 짓습니다');

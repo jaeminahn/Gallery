@@ -10,7 +10,7 @@
 <header class="site-header" id="site-header">
   <div class="wrap nav">
     <a class="brand" href="<?php echo esc_url(home_url('/')); ?>" aria-label="갤러리조명 홈">
-      <span class="brand-mark">G</span><span>갤러리조명</span>
+      <span>갤러리조명</span>
     </a>
     <nav class="nav-links" aria-label="주 메뉴">
       <a href="<?php echo esc_url(home_url('/#services')); ?>">전문 시공</a>

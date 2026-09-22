@@ -2,7 +2,7 @@
   <div class="wrap">
     <div class="footer-grid">
       <div>
-        <a class="brand" href="<?php echo esc_url(home_url('/')); ?>"><span class="brand-mark">G</span><span>갤러리조명</span></a>
+        <a class="brand" href="<?php echo esc_url(home_url('/')); ?>"><span>갤러리조명</span></a>
         <p>빛으로 공간의 인상을 완성합니다.<br>바리솔과 LED 조명의 경험을 현장에 맞게 제안합니다.</p>
       </div>
       <div><p class="footer-title">상담</p><p><a href="tel:01045888709">010-4588-8709</a><br><a href="tel:0522570644">052-257-0644</a><br>luxurylusso@naver.com</p></div>

@@ -1,0 +1,102 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+
+/* 갤러리조명 admin — 랜딩 페이지와 같은 모노톤 기조 */
+
+:root {
+  --ink: #161513;
+  --muted: #6f6b64;
+  --paper: #faf9f6;
+  --line: rgba(22, 21, 19, .14);
+}
+
+body {
+  background: var(--paper);
+  font-family: Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 사이드바 */
+#adminmenuback, #adminmenuwrap { background: var(--ink); }
+#adminmenu a { color: rgba(255, 255, 255, .72); transition: color .2s; }
+#adminmenu a:hover, #adminmenu li.menu-top:hover, #adminmenu li.opensub > a.menu-top, #adminmenu li > a.current:focus { color: #fff; background: rgba(255, 255, 255, .06); }
+#adminmenu li.current > a.current, #adminmenu li.wp-has-current-submenu > a.wp-has-current-submenu { background: #fff; color: var(--ink); font-weight: 600; }
+#adminmenu .wp-submenu { background: rgba(255, 255, 255, .04); }
+#adminmenu .wp-has-current-submenu .wp-submenu { background: rgba(255, 255, 255, .06); }
+#adminmenu .wp-submenu a { color: rgba(255, 255, 255, .65); }
+#adminmenu .wp-submenu a:hover, #adminmenu .wp-submenu li.current a { color: #fff; }
+#adminmenu .wp-has-current-submenu ul > li > a, .folded #adminmenu li.menu-top .wp-submenu > li > a { padding-left: 20px; }
+#adminmenu li.wp-has-submenu.wp-not-current-submenu.opensub:hover:after { border-right-color: var(--ink); }
+#adminmenu .awaiting-mod, #adminmenu .update-plugins { background: var(--ink); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+
+/* 상단 툴바 */
+#wpadminbar { background: var(--ink); color: rgba(255, 255, 255, .75); }
+#wpadminbar a, #wpadminbar .ab-item { color: rgba(255, 255, 255, .75) !important; transition: color .2s; }
+#wpadminbar a:hover, #wpadminbar .ab-item:hover { color: #fff !important; background: rgba(255, 255, 255, .06) !important; }
+#wpadminbar .menupop .ab-sub-wrapper { background: var(--ink); }
+#wpadminbar #adminbarsearch { background: transparent; }
+
+/* 버튼 */
+.wp-core-ui .button, .wp-core-ui .button-secondary {
+  border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink);
+  transition: opacity .2s;
+}
+.wp-core-ui .button:hover, .wp-core-ui .button-secondary:hover { border-color: var(--ink); background: #fff; color: var(--ink); }
+.wp-core-ui .button-primary {
+  border: 0; border-radius: 999px; background: var(--ink); color: #fff; box-shadow: none;
+  transition: opacity .2s;
+}
+.wp-core-ui .button-primary:hover, .wp-core-ui .button-primary:focus { background: var(--ink); color: #fff; opacity: .85; box-shadow: none; }
+
+/* 링크, 폼 */
+a { color: var(--ink); }
+a:hover { color: var(--muted); }
+#wpbody input[type="text"], #wpbody input[type="password"], #wpbody input[type="search"],
+#wpbody input[type="email"], #wpbody input[type="url"], #wpbody select, #wpbody textarea {
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+#wpbody input:focus, #wpbody select:focus, #wpbody textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+
+/* 알림 메시지 */
+.notice { border-radius: 8px; border-left-width: 1px; }
+.notice-success { border-color: #2e7d32; }
+.notice-error { border-color: #c62828; }
+
+/* 카드/박스 */
+.postbox, .welcome-panel, .card, .stuffbox {
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: none; background: #fff;
+}
+.postbox-header, .welcome-panel h2 { border-bottom-color: var(--line); }
+
+/* 테이블 */
+.wp-list-table.widefat { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.widefat thead th, .widefat tfoot th { background: var(--paper); }
+
+/* 로그인 화면 */
+body.login {
+  background: var(--paper);
+  display: flex; align-items: center; justify-content: center; min-height: 100vh;
+}
+body.login #login { width: 360px; padding: 0; }
+body.login h1 a { display: none; }
+body.login h1::after {
+  content: "갤러리조명"; display: block; margin-bottom: 32px;
+  font-size: 28px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); text-indent: 0;
+}
+#loginform, .login .message, .login .notice {
+  border: 1px solid var(--line) !important; border-radius: 16px; background: #fff !important;
+  box-shadow: 0 20px 60px rgba(22, 21, 19, .06); padding: 32px;
+}
+.login .message, .login .notice { padding: 16px 24px; margin-bottom: 20px; }
+#loginform label { color: var(--muted); font-size: 13px; }
+#loginform input[type="text"], #loginform input[type="password"] {
+  border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px; background: var(--paper);
+}
+#loginform input:focus { border-color: var(--ink); box-shadow: none; }
+#loginform .button-primary {
+  width: 100%; border: 0; border-radius: 999px; background: var(--ink); color: #fff;
+  min-height: 50px; font-size: 14px; font-weight: 600; transition: opacity .2s;
+}
+#loginform .button-primary:hover { background: var(--ink); opacity: .85; }
+.login #nav, .login #backtoblog { text-align: center; }
+.login #nav a, .login #backtoblog a { color: var(--muted); font-size: 13px; }
+.login #nav a:hover, .login #backtoblog a:hover { color: var(--ink); }
