@@ -482,7 +482,6 @@ final class Gallery_Naver_Blog_Sync
     {
         $source_url = self::source_url($post['log_no']);
         $queue_status = (string) ($post['queue_status'] ?? '');
-        $thumbnail = self::normalize_image_url((string) ($post['thumbnail'] ?? ''));
         ?>
         <article class="gallery-sync-row" data-log-no="<?php echo esc_attr($post['log_no']); ?>" data-queue-status="<?php echo esc_attr($queue_status); ?>">
             <?php if ($selectable && ! in_array($queue_status, ['pending', 'processing', 'cancelling'], true)) : ?>
@@ -496,9 +495,6 @@ final class Gallery_Naver_Blog_Sync
             <?php else : ?>
                 <span class="gallery-sync-status">완료</span>
             <?php endif; ?>
-            <div class="gallery-sync-thumb">
-                <?php if ($thumbnail) : ?><img src="<?php echo esc_url($thumbnail); ?>" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><?php else : ?><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="screen-reader-text">대표 이미지 없음</span><?php endif; ?>
-            </div>
             <div class="gallery-sync-info">
                 <h3><?php echo esc_html($post['title']); ?></h3>
                 <div class="gallery-sync-meta">
