@@ -55,7 +55,6 @@ final class Gallery_Naver_Blog_Sync
         add_filter('upload_mimes', [self::class, 'keep_remote_images_only']);
         add_action('wp_ajax_gallery_naver_process_next', [self::class, 'handle_process_next']);
         add_action('wp_ajax_gallery_naver_refresh_page', [self::class, 'handle_refresh_page']);
-        add_action('wp_ajax_gallery_naver_fetch_thumbnails', [self::class, 'handle_fetch_thumbnails']);
         add_action('admin_post_gallery_naver_save_settings', [self::class, 'handle_save_settings']);
         add_action('admin_post_gallery_naver_retry', [self::class, 'handle_retry']);
     }
@@ -290,7 +289,6 @@ final class Gallery_Naver_Blog_Sync
             const text = document.getElementById('gallery-sync-progress-text');
             const nonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_process')); ?>;
             const listNonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_refresh_page')); ?>;
-            const thumbnailNonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_fetch_thumbnails')); ?>;
             const listComplete = <?php echo $result['complete'] ? 'true' : 'false'; ?>;
             const listProgress = document.getElementById('gallery-list-progress');
             const listFill = document.getElementById('gallery-list-progress-fill');
@@ -381,44 +379,6 @@ final class Gallery_Naver_Blog_Sync
             if (!listComplete) {
                 refreshListPage();
                 document.addEventListener('visibilitychange', refreshListPage, { once: true });
-            } else {
-                hydrateThumbnails();
-            }
-
-            async function hydrateThumbnails() {
-                const items = Array.from(document.querySelectorAll('.gallery-sync-thumb[data-needs-thumbnail="1"]'));
-                for (let index = 0; index < items.length; index += 5) {
-                    const batch = items.slice(index, index + 5);
-                    const ids = batch.map((item) => item.dataset.logNo);
-                    try {
-                        const res = await fetch(ajaxurl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: new URLSearchParams({
-                                action: 'gallery_naver_fetch_thumbnails',
-                                _ajax_nonce: thumbnailNonce,
-                                log_nos: ids.join(','),
-                            }),
-                        });
-                        const json = await res.json();
-                        if (!json.success) continue;
-                        batch.forEach((item) => {
-                            const url = json.data.thumbnails[item.dataset.logNo];
-                            if (!url) return;
-                            const image = document.createElement('img');
-                            image.alt = '';
-                            image.loading = 'lazy';
-                            image.decoding = 'async';
-                            image.referrerPolicy = 'no-referrer';
-                            image.addEventListener('error', () => image.remove());
-                            image.src = url;
-                            item.replaceChildren(image);
-                            item.dataset.needsThumbnail = '0';
-                        });
-                    } catch (error) {
-                        // Keep the accessible placeholder and continue with the next batch.
-                    }
-                }
             }
         })();
         </script>
@@ -428,7 +388,6 @@ final class Gallery_Naver_Blog_Sync
     private static function render_row(array $post, bool $selectable): void
     {
         $source_url = self::source_url($post['log_no']);
-        $thumbnail = self::normalize_image_url((string) ($post['thumbnail'] ?? ''));
         ?>
         <article class="gallery-sync-row">
             <?php if ($selectable) : ?>
@@ -436,9 +395,6 @@ final class Gallery_Naver_Blog_Sync
             <?php else : ?>
                 <span class="gallery-sync-status">완료</span>
             <?php endif; ?>
-            <div class="gallery-sync-thumb" data-log-no="<?php echo esc_attr($post['log_no']); ?>" data-needs-thumbnail="<?php echo $thumbnail ? '0' : '1'; ?>">
-                <?php if ($thumbnail) : ?><img src="<?php echo esc_url($thumbnail); ?>" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><?php else : ?><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="screen-reader-text">대표 이미지 불러오는 중</span><?php endif; ?>
-            </div>
             <div class="gallery-sync-info">
                 <h3><?php echo esc_html($post['title']); ?></h3>
                 <div class="gallery-sync-meta">
@@ -540,132 +496,6 @@ final class Gallery_Naver_Blog_Sync
             'total' => count($posts),
             'page' => $page,
         ]);
-    }
-
-    public static function handle_fetch_thumbnails(): void
-    {
-        if (! current_user_can('manage_options')) {
-            wp_send_json_error(['message' => '권한이 없습니다.'], 403);
-        }
-        check_ajax_referer('gallery_naver_fetch_thumbnails');
-
-        $raw_ids = explode(',', (string) wp_unslash($_POST['log_nos'] ?? ''));
-        $log_numbers = array_slice(array_values(array_unique(array_filter(array_map(
-            static fn($id): string => preg_replace('/\D/', '', $id),
-            $raw_ids,
-        )))), 0, 5);
-        if (! $log_numbers) {
-            wp_send_json_success(['thumbnails' => []]);
-        }
-
-        $state = self::get_remote_posts();
-        $wanted = array_fill_keys($log_numbers, true);
-        $thumbnails = [];
-        foreach ($state['posts'] as &$post) {
-            $log_no = (string) ($post['log_no'] ?? '');
-            if (! isset($wanted[$log_no])) {
-                continue;
-            }
-            $thumbnail = self::normalize_image_url((string) ($post['thumbnail'] ?? ''));
-            if (! $thumbnail) {
-                $thumbnail = self::fetch_remote_thumbnail($log_no);
-                if ($thumbnail) {
-                    $post['thumbnail'] = $thumbnail;
-                }
-            }
-            if ($thumbnail) {
-                $thumbnails[$log_no] = $thumbnail;
-            }
-        }
-        unset($post);
-        update_option(self::LIST_OPTION, $state, false);
-
-        wp_send_json_success(['thumbnails' => $thumbnails]);
-    }
-
-    public static function handle_process_next(): void
-    {
-        if (! current_user_can('manage_options')) {
-            wp_send_json_error(['message' => '권한이 없습니다.'], 403);
-        }
-        check_ajax_referer('gallery_naver_process');
-
-        if (get_transient('gallery_naver_sync_paused')) {
-            wp_send_json_success(['status' => 'paused', 'remaining' => self::pending_count()]);
-        }
-
-        $queue = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
-        $index = null;
-        foreach ($queue as $i => $item) {
-            if ($item['status'] === 'pending') {
-                $index = $i;
-                break;
-            }
-        }
-        if ($index === null) {
-            wp_send_json_success(['status' => 'empty', 'remaining' => 0]);
-        }
-
-        $log_no = $queue[$index]['log_no'];
-        $result = self::sync_post($log_no);
-
-        if (is_wp_error($result) && self::is_blocked_error($result)) {
-            set_transient('gallery_naver_sync_paused', time(), self::BLOCK_PAUSE);
-            wp_send_json_success(['status' => 'paused', 'remaining' => self::pending_count()]);
-        }
-
-        if (is_wp_error($result)) {
-            $queue[$index]['status'] = 'failed';
-            $queue[$index]['attempts']++;
-            $queue[$index]['error'] = $result->get_error_message();
-            update_option(self::QUEUE_OPTION, $queue, false);
-
-            wp_send_json_success([
-                'status' => 'error',
-                'log_no' => $log_no,
-                'message' => $result->get_error_message(),
-                'remaining' => self::pending_count(),
-            ]);
-        }
-
-        unset($queue[$index]);
-        update_option(self::QUEUE_OPTION, array_values($queue), false);
-        wp_send_json_success([
-            'status' => $result['updated'] ? 'updated' : 'done',
-            'log_no' => $log_no,
-            'post_id' => $result['post_id'],
-            'edit_url' => get_edit_post_link($result['post_id'], 'raw'),
-            'remaining' => self::pending_count(),
-        ]);
-    }
-
-    private static function pending_count(): int
-    {
-        return count(array_filter(
-            self::normalize_queue((array) get_option(self::QUEUE_OPTION, [])),
-            fn($item) => $item['status'] === 'pending',
-        ));
-    }
-
-    private static function normalize_queue(array $queue): array
-    {
-        $normalized = [];
-        foreach ($queue as $item) {
-            if (is_string($item)) {
-                $item = ['log_no' => $item, 'attempts' => 0, 'status' => 'pending', 'error' => ''];
-            }
-            $item = wp_parse_args($item, ['log_no' => '', 'attempts' => 0, 'status' => 'pending', 'error' => '']);
-            if ($item['log_no'] !== '' && ! isset($normalized[$item['log_no']])) {
-                $normalized[$item['log_no']] = $item;
-            }
-        }
-
-        return array_values($normalized);
-    }
-
-    private static function is_blocked_error(WP_Error $error): bool
-    {
-        return in_array($error->get_error_code(), ['blocked', 'http_error'], true);
     }
 
     public static function handle_sync(): void
@@ -1396,7 +1226,7 @@ PROMPT;
 
     private static function admin_css(): string
     {
-        return '.gallery-sync-admin{max-width:1200px}.gallery-sync-hero{display:flex;justify-content:space-between;gap:32px;align-items:flex-end;margin:28px 0;padding:32px;border-radius:18px;background:#171712;color:#fff}.gallery-sync-hero h1{margin:8px 0 6px;color:#fff;font-size:34px}.gallery-sync-hero p{max-width:680px;margin:0;color:#babaae}.gallery-sync-kicker{color:#d7ff57;font-weight:700}.gallery-sync-hero .gallery-refresh{border-color:#d7ff57;background:#d7ff57;color:#171712}.gallery-sync-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.gallery-sync-summary div{display:flex;align-items:baseline;gap:12px;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-summary strong{font-size:30px}.gallery-sync-summary span{color:#64645d}.gallery-sync-settings{margin-top:22px}.gallery-sync-settings .form-table th{width:160px}.gallery-sync-settings .form-table td{padding:12px 10px}.gallery-sync-failed{border-color:#f0caca;background:#fffafa}.gallery-sync-status-failed{background:#f6d5d5;color:#7a1f1f}.gallery-sync-section{margin-top:22px;padding:26px;border:1px solid #dcdcda;border-radius:18px;background:#fff}.gallery-sync-heading h2{margin:0;font-size:24px}.gallery-sync-heading p{margin:5px 0 0;color:#6b6b64}.gallery-sync-toolbar{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;padding:12px 16px;border-radius:10px;background:#f5f5f1}.gallery-sync-list{border-top:1px solid #e4e4df}.gallery-sync-row{display:grid;grid-template-columns:34px 90px minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 6px;border-bottom:1px solid #e4e4df}.gallery-sync-check input{width:18px;height:18px}.gallery-sync-thumb{width:90px;height:68px;overflow:hidden;border-radius:8px;background:#efefe9}.gallery-sync-thumb img{width:100%;height:100%;object-fit:cover}.gallery-sync-thumb .dashicons{display:grid;width:100%;height:100%;place-items:center;color:#aaa}.gallery-sync-info h3{margin:0 0 7px;font-size:15px}.gallery-sync-meta{display:flex;gap:14px;color:#77776f;font-size:12px}.gallery-sync-actions{display:flex;gap:10px;white-space:nowrap}.gallery-sync-status{display:inline-flex;justify-content:center;padding:4px 7px;border-radius:999px;background:#eaffaa;color:#314000;font-size:11px;font-weight:700}.gallery-sync-progress{margin:22px 0;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-progress-bar{height:8px;overflow:hidden;border-radius:999px;background:#efefe9}.gallery-sync-progress-bar span{display:block;height:100%;width:0;border-radius:999px;background:#171712;transition:width .4s ease}.gallery-sync-progress p{margin:12px 0 0;color:#6b6b64}.gallery-empty{margin-top:20px;padding:30px;border-radius:12px;background:#f6f6f2;color:#777;text-align:center}.gallery-sync-pagination{display:flex;flex-wrap:wrap;gap:5px;margin-top:20px}.gallery-sync-pagination .page-numbers{display:grid;min-width:34px;height:34px;padding:0 9px;place-items:center;border:1px solid #dcdcda;border-radius:7px;text-decoration:none}.gallery-sync-pagination .current{border-color:#171712;background:#171712;color:#fff}@media(max-width:782px){.gallery-sync-hero{display:block}.gallery-sync-hero .button{margin-top:18px}.gallery-sync-summary{grid-template-columns:1fr}.gallery-sync-row{grid-template-columns:28px 70px 1fr}.gallery-sync-thumb{width:70px;height:54px}.gallery-sync-actions{grid-column:3}.gallery-sync-meta{display:block}}';
+        return '.gallery-sync-admin{max-width:1200px}.gallery-sync-hero{display:flex;justify-content:space-between;gap:32px;align-items:flex-end;margin:28px 0;padding:32px;border-radius:18px;background:#171712;color:#fff}.gallery-sync-hero h1{margin:8px 0 6px;color:#fff;font-size:34px}.gallery-sync-hero p{max-width:680px;margin:0;color:#babaae}.gallery-sync-kicker{color:#d7ff57;font-weight:700}.gallery-sync-hero .gallery-refresh{border-color:#d7ff57;background:#d7ff57;color:#171712}.gallery-sync-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.gallery-sync-summary div{display:flex;align-items:baseline;gap:12px;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-summary strong{font-size:30px}.gallery-sync-summary span{color:#64645d}.gallery-sync-settings{margin-top:22px}.gallery-sync-settings .form-table th{width:160px}.gallery-sync-settings .form-table td{padding:12px 10px}.gallery-sync-failed{border-color:#f0caca;background:#fffafa}.gallery-sync-status-failed{background:#f6d5d5;color:#7a1f1f}.gallery-sync-section{margin-top:22px;padding:26px;border:1px solid #dcdcda;border-radius:18px;background:#fff}.gallery-sync-heading h2{margin:0;font-size:24px}.gallery-sync-heading p{margin:5px 0 0;color:#6b6b64}.gallery-sync-toolbar{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;padding:12px 16px;border-radius:10px;background:#f5f5f1}.gallery-sync-list{border-top:1px solid #e4e4df}.gallery-sync-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 6px;border-bottom:1px solid #e4e4df}.gallery-sync-check input{width:18px;height:18px}.gallery-sync-info h3{margin:0 0 7px;font-size:15px}.gallery-sync-meta{display:flex;gap:14px;color:#77776f;font-size:12px}.gallery-sync-actions{display:flex;gap:10px;white-space:nowrap}.gallery-sync-status{display:inline-flex;justify-content:center;padding:4px 7px;border-radius:999px;background:#eaffaa;color:#314000;font-size:11px;font-weight:700}.gallery-sync-progress{margin:22px 0;padding:22px;border:1px solid #dcdcda;border-radius:14px;background:#fff}.gallery-sync-progress-bar{height:8px;overflow:hidden;border-radius:999px;background:#efefe9}.gallery-sync-progress-bar span{display:block;height:100%;width:0;border-radius:999px;background:#171712;transition:width .4s ease}.gallery-sync-progress p{margin:12px 0 0;color:#6b6b64}.gallery-empty{margin-top:20px;padding:30px;border-radius:12px;background:#f6f6f2;color:#777;text-align:center}.gallery-sync-pagination{display:flex;flex-wrap:wrap;gap:5px;margin-top:20px}.gallery-sync-pagination .page-numbers{display:grid;min-width:34px;height:34px;padding:0 9px;place-items:center;border:1px solid #dcdcda;border-radius:7px;text-decoration:none}.gallery-sync-pagination .current{border-color:#171712;background:#171712;color:#fff}@media(max-width:782px){.gallery-sync-hero{display:block}.gallery-sync-hero .button{margin-top:18px}.gallery-sync-summary{grid-template-columns:1fr}.gallery-sync-row{grid-template-columns:28px 1fr}.gallery-sync-actions{grid-column:3}.gallery-sync-meta{display:block}}';
     }
 
     private static function admin_accessibility_css(): string
