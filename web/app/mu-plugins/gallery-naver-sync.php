@@ -892,13 +892,15 @@ final class Gallery_Naver_Blog_Sync
 
         $settings = self::get_settings();
         $existing_id = self::find_existing_post($log_no);
+        $thumbnails = self::get_rss_thumbnails();
+        $thumbnail = $thumbnails[$log_no] ?? $remote['first_image'];
         $post_data = [
             'post_title' => $rewritten['title'],
             'post_content' => $rewritten['content'],
             'post_excerpt' => $rewritten['excerpt'],
             'meta_input' => [
                 self::META_SOURCE_URL => self::source_url($log_no),
-                '_gallery_naver_first_image' => $remote['first_image'],
+                '_gallery_naver_first_image' => $thumbnail,
                 self::META_REWRITTEN_AT => current_time('mysql'),
             ],
         ];
@@ -1533,7 +1535,13 @@ PROMPT;
     {
         return <<<'CSS'
 .gallery-sync-admin { color: #1d2327; }
-.gallery-sync-admin .gallery-sync-row { grid-template-columns: 64px 90px minmax(0, 1fr) auto; }
+.gallery-sync-admin .gallery-sync-row { grid-template-columns: 64px 90px minmax(0, 1fr) auto; padding-right: 16px; padding-left: 16px; }
+.gallery-sync-admin .gallery-sync-info { min-width: 0; padding: 0 12px; text-align: left; }
+.gallery-sync-admin .gallery-sync-info h3 { overflow-wrap: anywhere; }
+.gallery-sync-admin .gallery-sync-meta { justify-content: flex-start; }
+.gallery-sync-admin .gallery-sync-thumb { display: grid; width: 90px; height: 68px; overflow: hidden; place-items: center; border-radius: 8px; background: #efefe9; }
+.gallery-sync-admin .gallery-sync-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gallery-sync-admin .gallery-sync-thumb .dashicons { color: #8c8f94; }
 .gallery-sync-admin h1,
 .gallery-sync-admin h2,
 .gallery-sync-admin h3,
@@ -1572,10 +1580,10 @@ PROMPT;
 .gallery-sync-status-processing { min-width: 52px; background: #135e96; color: #fff; animation: gallery-sync-pulse 1.4s ease-in-out infinite; }
 .gallery-sync-status-cancelling { min-width: 52px; background: #b32d2e; color: #fff; }
 .gallery-sync-status-done { background: #eaffaa; color: #314000; }
-.gallery-sync-row:has(.gallery-sync-status-processing) { background: #f0f6fc; box-shadow: inset 3px 0 #135e96; }
-.gallery-sync-progress-error { border-left-color: #b32d2e; background: #fff5f5; }
+.gallery-sync-row:has(.gallery-sync-status-processing) { background: #f0f6fc; }
+.gallery-sync-progress-error { background: #fff5f5; }
 @keyframes gallery-sync-pulse { 50% { opacity: .62; } }
-.gallery-sync-progress { border-left: 4px solid #135e96; }
+.gallery-sync-progress { border-left-width: 1px; }
 .gallery-sync-progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 12px; }
 .gallery-sync-progress-copy p { margin: 0; }
 #gallery-sync-cancel { flex: 0 0 auto; border-color: #b32d2e; color: #b32d2e; }
@@ -1583,6 +1591,12 @@ PROMPT;
 .gallery-sync-progress-bar { background: #dcdcda; }
 .gallery-sync-progress-bar span { background: #135e96; }
 .gallery-sync-admin .notice { color: #1d2327; }
+@media (max-width: 1200px) {
+  .gallery-sync-admin .gallery-sync-row { grid-template-columns: 48px 80px minmax(0, 1fr); }
+  .gallery-sync-admin .gallery-sync-thumb { width: 80px; height: 60px; }
+  .gallery-sync-admin .gallery-sync-info { padding-right: 0; padding-left: 8px; }
+  .gallery-sync-admin .gallery-sync-actions { grid-column: 3; justify-content: flex-start; padding-left: 8px; white-space: normal; }
+}
 @media (max-width: 782px) {
   .gallery-sync-admin { margin-right: 12px; }
   .gallery-sync-hero, .gallery-sync-section { padding: 20px; border-radius: 12px; }
@@ -1594,6 +1608,7 @@ PROMPT;
   .gallery-sync-settings .form-table td { padding-left: 0; }
   .gallery-sync-settings input.regular-text, .gallery-sync-settings select { width: 100%; max-width: none; }
   .gallery-sync-admin .gallery-sync-row { grid-template-columns: 60px 70px minmax(0, 1fr); }
+  .gallery-sync-admin .gallery-sync-info { padding-right: 0; padding-left: 4px; }
   .gallery-sync-progress-copy { align-items: stretch; flex-direction: column; }
 }
 CSS;
