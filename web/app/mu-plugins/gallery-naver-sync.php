@@ -32,6 +32,10 @@ final class Gallery_Naver_Blog_Sync
 
     private const QUEUE_OPTION = 'gallery_naver_sync_queue';
 
+    private const PROCESS_LOCK = 'gallery_naver_sync_process_lock';
+
+    private const CANCEL_OPTION = 'gallery_naver_sync_cancel_requested';
+
     private const SETTINGS_OPTION = 'gallery_naver_sync_settings';
 
     private const META_REWRITTEN_AT = '_gallery_naver_rewritten_at';
@@ -54,6 +58,7 @@ final class Gallery_Naver_Blog_Sync
         add_action('admin_enqueue_scripts', [self::class, 'admin_assets']);
         add_filter('upload_mimes', [self::class, 'keep_remote_images_only']);
         add_action('wp_ajax_gallery_naver_process_next', [self::class, 'handle_process_next']);
+        add_action('wp_ajax_gallery_naver_cancel', [self::class, 'handle_cancel']);
         add_action('wp_ajax_gallery_naver_refresh_page', [self::class, 'handle_refresh_page']);
         add_action('admin_post_gallery_naver_save_settings', [self::class, 'handle_save_settings']);
         add_action('admin_post_gallery_naver_retry', [self::class, 'handle_retry']);
@@ -98,11 +103,16 @@ final class Gallery_Naver_Blog_Sync
         $result = self::get_remote_posts();
         $posts = $result['posts'];
         $thumbnails = self::get_rss_thumbnails();
+        $queue_items = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
+        $queue_count = count(array_filter($queue_items, fn($item) => in_array($item['status'], ['pending', 'processing', 'cancelling'], true)));
+        $failed_items = array_filter($queue_items, fn($item) => $item['status'] === 'failed');
+        $is_syncing = $queue_count > 0;
         $published_map = self::get_published_map(array_column($posts, 'log_no'));
         $pending = [];
         $published = [];
 
         foreach ($posts as $post) {
+            $post['queue_status'] = $queue_items[$post['log_no']]['status'] ?? '';
             if (! $post['thumbnail'] && isset($thumbnails[$post['log_no']])) {
                 $post['thumbnail'] = $thumbnails[$post['log_no']];
             }
@@ -131,12 +141,12 @@ final class Gallery_Naver_Blog_Sync
         $notice = get_transient('gallery_naver_sync_notice_' . get_current_user_id());
         delete_transient('gallery_naver_sync_notice_' . get_current_user_id());
         ?>
-        <div class="wrap gallery-sync-admin">
+        <div class="wrap gallery-sync-admin <?php echo $is_syncing ? 'is-syncing' : ''; ?>">
             <?php $settings = self::get_settings();
         $env_key = self::env_api_key(); ?>
             <div class="gallery-sync-notices">
             <?php if (is_array($notice)) : ?>
-                <div class="notice notice-<?php echo $notice['errors'] ? 'warning' : 'success'; ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
+                <div class="gallery-sync-alert gallery-sync-alert-<?php echo $notice['errors'] ? 'warning' : 'success'; ?>" role="<?php echo $notice['errors'] ? 'alert' : 'status'; ?>"><p><?php echo esc_html($notice['message']); ?></p></div>
             <?php endif; ?>
             </div>
 
@@ -144,7 +154,11 @@ final class Gallery_Naver_Blog_Sync
                 <div>
                     <h1>네이버 LED 글 동기화</h1>
                 </div>
-                <a class="button gallery-refresh" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=gallery_naver_refresh'), 'gallery_naver_refresh')); ?>">목록 새로고침</a>
+                <?php if ($is_syncing) : ?>
+                    <span class="button gallery-refresh disabled" aria-disabled="true">작성 중에는 새로고침할 수 없음</span>
+                <?php else : ?>
+                    <a class="button gallery-refresh" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=gallery_naver_refresh'), 'gallery_naver_refresh')); ?>">목록 새로고침</a>
+                <?php endif; ?>
             </div>
 
             <section class="gallery-sync-section gallery-sync-settings">
@@ -152,6 +166,7 @@ final class Gallery_Naver_Blog_Sync
                 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                     <input type="hidden" name="action" value="gallery_naver_save_settings">
                     <?php wp_nonce_field('gallery_naver_save_settings'); ?>
+                    <fieldset <?php disabled($is_syncing); ?>>
                     <table class="form-table" role="presentation">
                         <tr>
                             <th scope="row"><label for="gallery-openai-key">OpenAI API 키</label></th>
@@ -188,25 +203,26 @@ final class Gallery_Naver_Blog_Sync
                         </tr>
                     </table>
                     <?php submit_button('설정 저장'); ?>
+                    </fieldset>
                 </form>
             </section>
 
             <?php
-        $queue_items = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
-        $queue_count = count(array_filter($queue_items, fn($item) => $item['status'] !== 'failed'));
-        $failed_items = array_filter($queue_items, fn($item) => $item['status'] === 'failed');
         $paused = (bool) get_transient('gallery_naver_sync_paused');
         ?>
             <div id="gallery-sync-progress" class="gallery-sync-progress" hidden>
                 <div class="gallery-sync-progress-bar"><span id="gallery-sync-progress-fill"></span></div>
-                <p id="gallery-sync-progress-text"></p>
+                <div class="gallery-sync-progress-copy">
+                    <p id="gallery-sync-progress-text"></p>
+                    <button type="button" id="gallery-sync-cancel" class="button">작성 취소</button>
+                </div>
             </div>
             <?php if ($paused) : ?>
-                <div class="notice notice-warning"><p>네이버가 요청을 일시 제한했습니다. 약 30분 후에 자동으로 재개됩니다.</p></div>
+                <div class="gallery-sync-alert gallery-sync-alert-warning" role="alert"><p>네이버가 요청을 일시 제한했습니다. 약 30분 후에 자동으로 재개됩니다.</p></div>
             <?php endif; ?>
 
             <?php if ($result['error']) : ?>
-                <div class="notice notice-error"><p><?php echo esc_html($result['error']); ?></p></div>
+                <div class="gallery-sync-alert gallery-sync-alert-error" role="alert"><p><?php echo esc_html($result['error']); ?></p></div>
             <?php endif; ?>
 
             <div class="gallery-sync-summary">
@@ -220,7 +236,7 @@ final class Gallery_Naver_Blog_Sync
                 <p id="gallery-list-progress-text"><?php echo $posts ? esc_html('저장된 ' . count($posts) . '개 글을 먼저 표시했습니다. 나머지 목록을 불러오는 중입니다.') : '네이버 글 목록을 불러오는 중입니다.'; ?></p>
             </div>
 
-            <section class="gallery-sync-section">
+            <section class="gallery-sync-section gallery-sync-pending">
                 <div class="gallery-sync-heading"><div><h2>게시 전</h2></div></div>
                 <?php if ($pending) : ?>
                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -228,7 +244,7 @@ final class Gallery_Naver_Blog_Sync
                         <?php wp_nonce_field('gallery_naver_sync'); ?>
                         <div class="gallery-sync-toolbar">
                             <label><input type="checkbox" data-gallery-select-all> 전체 선택</label>
-                            <button class="button button-primary button-hero" type="submit">선택한 글 동기화</button>
+                            <button class="button button-primary button-hero" type="submit" <?php disabled($is_syncing); ?>><?php echo $is_syncing ? 'AI 작성 진행 중' : '선택한 글 동기화'; ?></button>
                         </div>
                         <div class="gallery-sync-list">
                             <?php foreach ($pending as $post) : self::render_row($post, true); endforeach; ?>
@@ -288,6 +304,8 @@ final class Gallery_Naver_Blog_Sync
             const fill = document.getElementById('gallery-sync-progress-fill');
             const text = document.getElementById('gallery-sync-progress-text');
             const nonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_process')); ?>;
+            const cancelNonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_cancel')); ?>;
+            const cancelButton = document.getElementById('gallery-sync-cancel');
             const listNonce = <?php echo wp_json_encode(wp_create_nonce('gallery_naver_refresh_page')); ?>;
             const listComplete = <?php echo $result['complete'] ? 'true' : 'false'; ?>;
             const listProgress = document.getElementById('gallery-list-progress');
@@ -296,18 +314,49 @@ final class Gallery_Naver_Blog_Sync
             let total = <?php echo esc_js($queue_count); ?>;
             let processed = 0;
             let running = false;
+            let cancelRequested = false;
+
+            function markNextAsProcessing() {
+                const row = document.querySelector('[data-queue-status="pending"]');
+                if (!row) return;
+                row.dataset.queueStatus = 'processing';
+                const badge = row.querySelector('.gallery-sync-status-pending');
+                if (badge) {
+                    badge.className = 'gallery-sync-status gallery-sync-status-processing';
+                    badge.textContent = '게시 중';
+                }
+            }
+
+            function markResult(logNo, status) {
+                const row = document.querySelector('[data-log-no="' + logNo + '"]');
+                if (!row) return;
+                const badge = row.querySelector('.gallery-sync-status');
+                if (!badge) return;
+                row.dataset.queueStatus = status;
+                badge.className = 'gallery-sync-status gallery-sync-status-' + status;
+                badge.textContent = status === 'failed' ? '실패' : '완료';
+            }
 
             async function tick() {
-                if (document.hidden || running) return;
+                if (document.hidden || running || cancelRequested) return;
                 running = true;
+                markNextAsProcessing();
                 try {
                     const res = await fetch(ajaxurl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: new URLSearchParams({ action: 'gallery_naver_process_next', _ajax_nonce: nonce }),
                     });
-                    const json = await res.json();
-                    if (!json.success) return;
+                    const raw = await res.text();
+                    let json;
+                    try {
+                        json = JSON.parse(raw);
+                    } catch (error) {
+                        throw new Error('서버가 올바른 응답을 보내지 않았습니다. HTTP ' + res.status);
+                    }
+                    if (!res.ok || !json.success) {
+                        throw new Error(json.data?.message || '서버 요청에 실패했습니다. HTTP ' + res.status);
+                    }
 
                     const data = json.data;
                     if (data.status === 'empty') {
@@ -319,6 +368,18 @@ final class Gallery_Naver_Blog_Sync
                         fill.style.width = '100%';
                         return;
                     }
+                    if (data.status === 'cancelled') {
+                        cancelRequested = true;
+                        fill.style.width = '0';
+                        text.textContent = '자동 작성을 취소했습니다. 작성 중이던 글은 게시되지 않았습니다.';
+                        setTimeout(() => window.location.reload(), 900);
+                        return;
+                    }
+                    if (data.status === 'busy') {
+                        text.textContent = '다른 창에서 AI 작성이 진행 중입니다. 완료 상태를 기다리고 있습니다.';
+                        setTimeout(tick, 1500);
+                        return;
+                    }
 
                     processed++;
                     const done = total - data.remaining;
@@ -326,12 +387,17 @@ final class Gallery_Naver_Blog_Sync
                     fill.style.width = (total ? Math.round(done / total * 100) : 100) + '%';
                     const label = { done: '게시 완료', updated: '기존 글 갱신', skipped: '이미 게시됨', error: '실패' }[data.status] || data.status;
                     text.textContent = label + ' (' + done + '/' + total + ')' + (data.message ? ' — ' + data.message : '');
+                    markResult(data.log_no, data.status === 'error' ? 'failed' : 'done');
 
-                    if (data.remaining > 0 && data.status !== 'error') {
+                    if (data.remaining > 0) {
                         setTimeout(tick, 500);
                     } else {
                         window.location.reload();
                     }
+                } catch (error) {
+                    progress.hidden = false;
+                    progress.classList.add('gallery-sync-progress-error');
+                    text.textContent = '자동 작성이 중단되었습니다. ' + error.message + ' 페이지를 새로고침하면 저장된 대기열에서 다시 확인할 수 있습니다.';
                 } finally {
                     running = false;
                 }
@@ -343,6 +409,33 @@ final class Gallery_Naver_Blog_Sync
                 tick();
                 document.addEventListener('visibilitychange', tick);
             }
+
+            cancelButton?.addEventListener('click', async function () {
+                if (cancelRequested || !window.confirm('현재 작성과 남은 대기 작업을 모두 취소할까요?')) return;
+                cancelRequested = true;
+                this.disabled = true;
+                this.textContent = '취소 요청 중';
+                text.textContent = '취소 요청을 전달하고 있습니다. 현재 AI 응답이 끝나면 글을 저장하지 않고 중단합니다.';
+                try {
+                    const res = await fetch(ajaxurl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'gallery_naver_cancel', _ajax_nonce: cancelNonce }),
+                    });
+                    const raw = await res.text();
+                    const json = JSON.parse(raw);
+                    if (!res.ok || !json.success) throw new Error(json.data?.message || '취소 요청에 실패했습니다.');
+                    text.textContent = json.data.message;
+                    if (json.data.status === 'cancelled') {
+                        setTimeout(() => window.location.reload(), 900);
+                    }
+                } catch (error) {
+                    cancelRequested = false;
+                    this.disabled = false;
+                    this.textContent = '작성 취소';
+                    text.textContent = error.message;
+                }
+            });
 
             async function refreshListPage() {
                 if (document.hidden) return;
@@ -388,13 +481,24 @@ final class Gallery_Naver_Blog_Sync
     private static function render_row(array $post, bool $selectable): void
     {
         $source_url = self::source_url($post['log_no']);
+        $queue_status = (string) ($post['queue_status'] ?? '');
+        $thumbnail = self::normalize_image_url((string) ($post['thumbnail'] ?? ''));
         ?>
-        <article class="gallery-sync-row">
-            <?php if ($selectable) : ?>
+        <article class="gallery-sync-row" data-log-no="<?php echo esc_attr($post['log_no']); ?>" data-queue-status="<?php echo esc_attr($queue_status); ?>">
+            <?php if ($selectable && ! in_array($queue_status, ['pending', 'processing', 'cancelling'], true)) : ?>
                 <label class="gallery-sync-check"><input type="checkbox" name="post_ids[]" value="<?php echo esc_attr($post['log_no']); ?>"><span class="screen-reader-text"><?php echo esc_html($post['title']); ?> 선택</span></label>
+            <?php elseif ($queue_status === 'processing') : ?>
+                <span class="gallery-sync-status gallery-sync-status-processing">게시 중</span>
+            <?php elseif ($queue_status === 'cancelling') : ?>
+                <span class="gallery-sync-status gallery-sync-status-cancelling">취소 중</span>
+            <?php elseif ($queue_status === 'pending') : ?>
+                <span class="gallery-sync-status gallery-sync-status-pending">대기 중</span>
             <?php else : ?>
                 <span class="gallery-sync-status">완료</span>
             <?php endif; ?>
+            <div class="gallery-sync-thumb">
+                <?php if ($thumbnail) : ?><img src="<?php echo esc_url($thumbnail); ?>" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><?php else : ?><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="screen-reader-text">대표 이미지 없음</span><?php endif; ?>
+            </div>
             <div class="gallery-sync-info">
                 <h3><?php echo esc_html($post['title']); ?></h3>
                 <div class="gallery-sync-meta">
@@ -439,6 +543,11 @@ final class Gallery_Naver_Blog_Sync
     public static function handle_refresh(): void
     {
         self::assert_admin_request('gallery_naver_refresh');
+        if (self::has_active_sync()) {
+            self::set_notice('AI 작성이 끝난 후 목록을 새로고침할 수 있습니다.', 1);
+            wp_safe_redirect(self::admin_url());
+            exit;
+        }
         delete_transient(self::CACHE_KEY);
         delete_transient(self::THUMB_CACHE_KEY);
         delete_option(self::LIST_OPTION);
@@ -498,12 +607,132 @@ final class Gallery_Naver_Blog_Sync
         ]);
     }
 
+    public static function handle_process_next(): void
+    {
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => '권한이 없습니다.'], 403);
+        }
+        check_ajax_referer('gallery_naver_process');
+
+        if (get_transient('gallery_naver_sync_paused')) {
+            wp_send_json_success(['status' => 'paused', 'remaining' => self::pending_count()]);
+        }
+        if (get_transient(self::PROCESS_LOCK)) {
+            wp_send_json_success(['status' => 'busy', 'remaining' => self::pending_count()]);
+        }
+
+        $queue = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
+        $log_no = '';
+        foreach ($queue as $candidate => $item) {
+            if ($item['status'] === 'pending') {
+                $log_no = (string) $candidate;
+                break;
+            }
+        }
+        if ($log_no === '') {
+            wp_send_json_success(['status' => 'empty', 'remaining' => 0]);
+        }
+
+        set_transient(self::PROCESS_LOCK, $log_no, 5 * MINUTE_IN_SECONDS);
+        $queue[$log_no]['status'] = 'processing';
+        $queue[$log_no]['started_at'] = time();
+        update_option(self::QUEUE_OPTION, array_values($queue), false);
+
+        $result = self::sync_post($log_no);
+        delete_transient(self::PROCESS_LOCK);
+        $queue = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
+
+        if (is_wp_error($result) && $result->get_error_code() === 'cancelled') {
+            unset($queue[$log_no]);
+            delete_option(self::CANCEL_OPTION);
+            update_option(self::QUEUE_OPTION, array_values($queue), false);
+            wp_send_json_success([
+                'status' => 'cancelled',
+                'log_no' => $log_no,
+                'remaining' => 0,
+            ]);
+        }
+
+        if (is_wp_error($result) && self::is_blocked_error($result)) {
+            $queue[$log_no]['status'] = 'pending';
+            update_option(self::QUEUE_OPTION, array_values($queue), false);
+            set_transient('gallery_naver_sync_paused', time(), self::BLOCK_PAUSE);
+            wp_send_json_success(['status' => 'paused', 'remaining' => self::pending_count()]);
+        }
+
+        if (is_wp_error($result)) {
+            $queue[$log_no]['status'] = 'failed';
+            $queue[$log_no]['attempts'] = (int) $queue[$log_no]['attempts'] + 1;
+            $queue[$log_no]['error'] = $result->get_error_message();
+            unset($queue[$log_no]['started_at']);
+            update_option(self::QUEUE_OPTION, array_values($queue), false);
+            wp_send_json_success([
+                'status' => 'error',
+                'log_no' => $log_no,
+                'message' => $result->get_error_message(),
+                'remaining' => self::pending_count(),
+            ]);
+        }
+
+        unset($queue[$log_no]);
+        update_option(self::QUEUE_OPTION, array_values($queue), false);
+        wp_send_json_success([
+            'status' => $result['updated'] ? 'updated' : 'done',
+            'log_no' => $log_no,
+            'post_id' => $result['post_id'],
+            'edit_url' => get_edit_post_link($result['post_id'], 'raw'),
+            'remaining' => self::pending_count(),
+        ]);
+    }
+
+    public static function handle_cancel(): void
+    {
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => '권한이 없습니다.'], 403);
+        }
+        check_ajax_referer('gallery_naver_cancel');
+
+        $queue = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
+        $processing_log_no = '';
+        $remaining = [];
+        foreach ($queue as $log_no => $item) {
+            if (in_array($item['status'], ['processing', 'cancelling'], true)) {
+                $processing_log_no = (string) $log_no;
+                $item['status'] = 'cancelling';
+                $remaining[$log_no] = $item;
+            } elseif ($item['status'] === 'failed') {
+                $remaining[$log_no] = $item;
+            }
+        }
+
+        if ($processing_log_no !== '') {
+            update_option(self::CANCEL_OPTION, $processing_log_no, false);
+            update_option(self::QUEUE_OPTION, array_values($remaining), false);
+            wp_send_json_success([
+                'status' => 'cancelling',
+                'message' => '취소 요청을 받았습니다. 현재 AI 응답이 끝나면 글을 저장하지 않고 중단합니다.',
+            ]);
+        }
+
+        delete_option(self::CANCEL_OPTION);
+        update_option(self::QUEUE_OPTION, array_values($remaining), false);
+        wp_send_json_success([
+            'status' => 'cancelled',
+            'message' => '대기 중인 자동 작성 작업을 취소했습니다.',
+        ]);
+    }
+
     private static function pending_count(): int
     {
         return count(array_filter(
             self::normalize_queue((array) get_option(self::QUEUE_OPTION, [])),
-            fn($item) => $item['status'] === 'pending',
+            fn($item) => in_array($item['status'], ['pending', 'processing', 'cancelling'], true),
         ));
+    }
+
+    private static function has_active_sync(): bool
+    {
+        return self::pending_count() > 0 || (bool) get_transient(self::PROCESS_LOCK);
     }
 
     private static function normalize_queue(array $queue): array
@@ -513,18 +742,33 @@ final class Gallery_Naver_Blog_Sync
             if (is_string($item)) {
                 $item = ['log_no' => $item, 'attempts' => 0, 'status' => 'pending', 'error' => ''];
             }
-            $item = wp_parse_args($item, ['log_no' => '', 'attempts' => 0, 'status' => 'pending', 'error' => '']);
+            $item = wp_parse_args($item, ['log_no' => '', 'attempts' => 0, 'status' => 'pending', 'error' => '', 'started_at' => 0]);
+            if ($item['status'] === 'processing' && (int) $item['started_at'] < time() - (10 * MINUTE_IN_SECONDS)) {
+                $item['status'] = 'pending';
+                $item['started_at'] = 0;
+            }
             if ($item['log_no'] !== '' && ! isset($normalized[$item['log_no']])) {
                 $normalized[$item['log_no']] = $item;
             }
         }
 
-        return array_values($normalized);
+        return $normalized;
+    }
+
+    private static function is_blocked_error(WP_Error $error): bool
+    {
+        return in_array($error->get_error_code(), ['blocked', 'http_error'], true);
     }
 
     public static function handle_sync(): void
     {
         self::assert_admin_request('gallery_naver_sync');
+        if (self::has_active_sync()) {
+            self::set_notice('이미 AI 작성이 진행 중입니다. 완료된 후 다음 글을 선택해 주세요.', 1);
+            wp_safe_redirect(self::admin_url());
+            exit;
+        }
+        delete_option(self::CANCEL_OPTION);
         $selected = isset($_POST['post_ids']) ? (array) wp_unslash($_POST['post_ids']) : [];
         $selected = array_values(array_unique(array_filter(array_map(
             static fn($id): string => preg_replace('/\D/', '', (string) $id),
@@ -563,6 +807,11 @@ final class Gallery_Naver_Blog_Sync
     public static function handle_retry(): void
     {
         self::assert_admin_request('gallery_naver_retry');
+        if (self::has_active_sync()) {
+            self::set_notice('현재 AI 작성이 끝난 후 실패한 글을 재시도해 주세요.', 1);
+            wp_safe_redirect(self::admin_url());
+            exit;
+        }
         $log_no = preg_replace('/\D/', '', (string) ($_GET['log_no'] ?? ''));
 
         $queue = self::normalize_queue((array) get_option(self::QUEUE_OPTION, []));
@@ -584,6 +833,11 @@ final class Gallery_Naver_Blog_Sync
     public static function handle_save_settings(): void
     {
         self::assert_admin_request('gallery_naver_save_settings');
+        if (self::has_active_sync()) {
+            self::set_notice('AI 작성 중에는 설정을 변경할 수 없습니다.', 1);
+            wp_safe_redirect(self::admin_url());
+            exit;
+        }
 
         $settings = self::get_settings();
         $key = trim((string) wp_unslash($_POST['openai_api_key'] ?? ''));
@@ -618,14 +872,26 @@ final class Gallery_Naver_Blog_Sync
             return new WP_Error('no_api_key', 'OpenAI API 키가 설정되지 않았습니다. 페이지 상단의 설정에서 키를 입력하거나 서버 환경변수 OPENAI_API_KEY를 설정하세요.');
         }
 
+        if (self::is_cancel_requested($log_no)) {
+            return new WP_Error('cancelled', '사용자가 자동 작성을 취소했습니다.');
+        }
+
         $remote = self::fetch_remote_post($log_no);
         if (is_wp_error($remote)) {
             return $remote;
         }
 
+        if (self::is_cancel_requested($log_no)) {
+            return new WP_Error('cancelled', '사용자가 자동 작성을 취소했습니다.');
+        }
+
         $rewritten = self::rewrite_with_ai($remote);
         if (is_wp_error($rewritten)) {
             return $rewritten;
+        }
+
+        if (self::is_cancel_requested($log_no)) {
+            return new WP_Error('cancelled', '사용자가 자동 작성을 취소했습니다.');
         }
 
         $settings = self::get_settings();
@@ -660,6 +926,13 @@ final class Gallery_Naver_Blog_Sync
         return ['post_id' => (int) $post_id, 'updated' => (bool) $existing_id];
     }
 
+    private static function is_cancel_requested(string $log_no): bool
+    {
+        $requested = (string) get_option(self::CANCEL_OPTION, '');
+
+        return $requested !== '' && hash_equals($requested, $log_no);
+    }
+
     private static function rewrite_with_ai(array $remote)
     {
         $content = $remote['content'];
@@ -687,7 +960,6 @@ final class Gallery_Naver_Blog_Sync
                     ['role' => 'system', 'content' => self::system_prompt()],
                     ['role' => 'user', 'content' => self::user_prompt($remote['title'], $content)],
                 ],
-                'temperature' => 0.7,
             ]),
         ]);
 
@@ -711,7 +983,7 @@ final class Gallery_Naver_Blog_Sync
         }
 
         // Restore images in their original order and exact original markup.
-        $rewritten_content = $decoded['content'];
+        $rewritten_content = self::normalize_ai_punctuation((string) $decoded['content']);
         foreach ($images as $i => $img) {
             $rewritten_content = preg_replace(
                 '/<!--\s*gallery-sync-img-' . $i . '\s*-->/i',
@@ -731,7 +1003,7 @@ final class Gallery_Naver_Blog_Sync
         $plain_text = self::clean_text(wp_strip_all_tags($rewritten_content));
 
         return [
-            'title' => self::clean_text((string) $decoded['title']),
+            'title' => self::clean_text(self::normalize_ai_punctuation((string) $decoded['title'])),
             'content' => $rewritten_content,
             'excerpt' => wp_trim_words($plain_text, 32, '...'),
         ];
@@ -777,6 +1049,11 @@ PROMPT;
             : '';
 
         return '[원문 제목]\n' . $title . '\n\n[원문 본문]\n' . $content . $reference_block;
+    }
+
+    private static function normalize_ai_punctuation(string $text): string
+    {
+        return str_replace(['–', '—', '·'], ['-', '-', ','], $text);
     }
 
     private static function style_reference(): string
@@ -896,7 +1173,7 @@ PROMPT;
                 continue;
             }
             $description = (string) $item->description;
-            if (! preg_match('#(https?://\S+?pstatic\.net/\S+?\.(?:jpe?g|png|gif))#i', $description, $image)) {
+            if (! preg_match('#(https?://[^"\'\s]+?pstatic\.net/[^"\'\s]+?\.(?:jpe?g|png|gif)[^"\'\s]*)#i', $description, $image)) {
                 continue;
             }
             $map[$match[1]] = self::normalize_image_url(html_entity_decode($image[1]));
@@ -1156,6 +1433,9 @@ PROMPT;
         if (! preg_match('#^https://(?:postfiles|blogfiles|storep-phinf|blogthumb)\.pstatic\.net/#i', $url)) {
             return '';
         }
+        if (str_contains(parse_url($url, PHP_URL_HOST) ?: '', 'blogthumb')) {
+            return $url;
+        }
         $url = preg_replace('/[?&]type=[^&]+/', '', $url);
 
         return $url . '?type=w966';
@@ -1257,17 +1537,19 @@ PROMPT;
     {
         return <<<'CSS'
 .gallery-sync-admin { color: #1d2327; }
+.gallery-sync-admin .gallery-sync-row { grid-template-columns: 64px 90px minmax(0, 1fr) auto; }
 .gallery-sync-admin h1,
 .gallery-sync-admin h2,
 .gallery-sync-admin h3,
 .gallery-sync-settings .form-table th,
 .gallery-sync-settings label { color: #1d2327; }
 .gallery-sync-admin .gallery-sync-hero h1 { color: #fff; }
-.gallery-sync-notices .notice { margin: 0 0 22px; border: 1px solid #dcdcda; border-left-width: 1px; border-radius: 12px; background: #fff; box-shadow: none; }
-.gallery-sync-notices .notice-success { border-color: #171712; }
-.gallery-sync-notices .notice-success p { color: #171712; font-weight: 600; }
-.gallery-sync-notices .notice-warning { border-color: #a3691c; background: #fdf7ec; }
-.gallery-sync-notices .notice-warning p { color: #7a4d12; }
+.gallery-sync-notices { position: relative; z-index: 1; margin-top: 24px; }
+.gallery-sync-alert { margin: 0 0 18px; padding: 13px 18px; border: 1px solid #dcdcda; border-left: 4px solid #646970; border-radius: 10px; background: #fff; color: #1d2327; box-shadow: none; }
+.gallery-sync-alert p { margin: 0; color: inherit; }
+.gallery-sync-alert-success { border-left-color: #008a20; background: #f0f8f1; color: #145523; font-weight: 600; }
+.gallery-sync-alert-warning { border-left-color: #b26200; background: #fff8e5; color: #6e4600; }
+.gallery-sync-alert-error { border-left-color: #d63638; background: #fcf0f1; color: #8a2424; }
 .gallery-sync-hero .gallery-refresh,
 .gallery-sync-hero .gallery-refresh:hover,
 .gallery-sync-hero .gallery-refresh:focus { border-color: #d7ff57; background: #d7ff57; color: #171712; font-weight: 700; }
@@ -1286,7 +1568,22 @@ PROMPT;
 .gallery-sync-settings input[type="password"],
 .gallery-sync-settings select { min-height: 42px; }
 .gallery-sync-settings .description { color: #50575e; }
+.gallery-sync-settings fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.gallery-sync-settings fieldset:disabled { opacity: .58; }
+.gallery-sync-admin.is-syncing .gallery-sync-settings,
+.gallery-sync-admin.is-syncing .gallery-sync-pending { pointer-events: none; opacity: .65; }
+.gallery-sync-status-pending { background: #fff3cd; color: #664d03; }
+.gallery-sync-status-processing { min-width: 52px; background: #135e96; color: #fff; animation: gallery-sync-pulse 1.4s ease-in-out infinite; }
+.gallery-sync-status-cancelling { min-width: 52px; background: #b32d2e; color: #fff; }
+.gallery-sync-status-done { background: #eaffaa; color: #314000; }
+.gallery-sync-row:has(.gallery-sync-status-processing) { background: #f0f6fc; box-shadow: inset 3px 0 #135e96; }
+.gallery-sync-progress-error { border-left-color: #b32d2e; background: #fff5f5; }
+@keyframes gallery-sync-pulse { 50% { opacity: .62; } }
 .gallery-sync-progress { border-left: 4px solid #135e96; }
+.gallery-sync-progress-copy { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 12px; }
+.gallery-sync-progress-copy p { margin: 0; }
+#gallery-sync-cancel { flex: 0 0 auto; border-color: #b32d2e; color: #b32d2e; }
+#gallery-sync-cancel:hover, #gallery-sync-cancel:focus { border-color: #b32d2e; background: #b32d2e; color: #fff; }
 .gallery-sync-progress-bar { background: #dcdcda; }
 .gallery-sync-progress-bar span { background: #135e96; }
 .gallery-sync-admin .notice { color: #1d2327; }
@@ -1300,6 +1597,8 @@ PROMPT;
   .gallery-sync-settings .form-table th { width: auto; padding-bottom: 4px; }
   .gallery-sync-settings .form-table td { padding-left: 0; }
   .gallery-sync-settings input.regular-text, .gallery-sync-settings select { width: 100%; max-width: none; }
+  .gallery-sync-admin .gallery-sync-row { grid-template-columns: 60px 70px minmax(0, 1fr); }
+  .gallery-sync-progress-copy { align-items: stretch; flex-direction: column; }
 }
 CSS;
     }
