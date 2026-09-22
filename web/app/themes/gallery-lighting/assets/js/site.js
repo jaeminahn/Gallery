@@ -31,8 +31,7 @@ document.querySelectorAll(".faq-item button").forEach((button) => {
   });
 });
 
-// Contact section: interactive dot field that glows around the cursor.
-(function () {
+// Contact section: interactive dot field that glows around the cursor.(function () {
   const canvas = document.getElementById("contact-dots");
   if (!canvas) return;
 
@@ -103,3 +102,21 @@ document.querySelectorAll(".faq-item button").forEach((button) => {
   resize();
   loop();
 })();
+
+document.querySelectorAll(".btn-share").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const payload = { title: button.dataset.shareTitle || document.title, url: button.dataset.shareUrl || location.href };
+    try {
+      if (navigator.share) {
+        await navigator.share(payload);
+        return;
+      }
+      await navigator.clipboard.writeText(payload.url);
+      const original = button.textContent;
+      button.textContent = "복사됨";
+      setTimeout(() => { button.textContent = original; }, 1600);
+    } catch (error) {
+      /* user cancelled or clipboard unavailable */
+    }
+  });
+});

@@ -1256,7 +1256,10 @@ PROMPT;
         $first_image = '';
         foreach ($xpath->query('.//img', $main) as $image) {
             $source = self::image_source($image);
-            if (! $source) {
+            $width = (int) $image->getAttribute('data-width');
+            $height = (int) $image->getAttribute('data-height');
+            $is_sticker = $width > 0 && $height > 0 && max($width, $height) < 220;
+            if (! $source || $is_sticker) {
                 $image->parentNode?->removeChild($image);
                 continue;
             }
@@ -1535,13 +1538,10 @@ PROMPT;
     {
         return <<<'CSS'
 .gallery-sync-admin { color: #1d2327; }
-.gallery-sync-admin .gallery-sync-row { grid-template-columns: 64px 90px minmax(0, 1fr) auto; padding-right: 16px; padding-left: 16px; }
-.gallery-sync-admin .gallery-sync-info { min-width: 0; padding: 0 12px; text-align: left; }
+.gallery-sync-admin .gallery-sync-row { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 20px; padding-right: 16px; padding-left: 16px; }
+.gallery-sync-admin .gallery-sync-info { min-width: 0; text-align: left; }
 .gallery-sync-admin .gallery-sync-info h3 { overflow-wrap: anywhere; }
 .gallery-sync-admin .gallery-sync-meta { justify-content: flex-start; }
-.gallery-sync-admin .gallery-sync-thumb { display: grid; width: 90px; height: 68px; overflow: hidden; place-items: center; border-radius: 8px; background: #efefe9; }
-.gallery-sync-admin .gallery-sync-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.gallery-sync-admin .gallery-sync-thumb .dashicons { color: #8c8f94; }
 .gallery-sync-admin h1,
 .gallery-sync-admin h2,
 .gallery-sync-admin h3,
@@ -1592,9 +1592,8 @@ PROMPT;
 .gallery-sync-progress-bar span { background: #135e96; }
 .gallery-sync-admin .notice { color: #1d2327; }
 @media (max-width: 1200px) {
-  .gallery-sync-admin .gallery-sync-row { grid-template-columns: 48px 80px minmax(0, 1fr); }
-  .gallery-sync-admin .gallery-sync-thumb { width: 80px; height: 60px; }
-  .gallery-sync-admin .gallery-sync-info { padding-right: 0; padding-left: 8px; }
+  .gallery-sync-admin .gallery-sync-row { grid-template-columns: 40px minmax(0, 1fr); }
+  
   .gallery-sync-admin .gallery-sync-actions { grid-column: 3; justify-content: flex-start; padding-left: 8px; white-space: normal; }
 }
 @media (max-width: 782px) {
