@@ -134,17 +134,17 @@ final class Gallery_Naver_Blog_Sync
         <div class="wrap gallery-sync-admin">
             <?php $settings = self::get_settings();
         $env_key = self::env_api_key(); ?>
+            <div class="gallery-sync-notices">
+            <?php if (is_array($notice)) : ?>
+                <div class="notice notice-<?php echo $notice['errors'] ? 'warning' : 'success'; ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
+            <?php endif; ?>
+            </div>
+
             <div class="gallery-sync-hero">
                 <div>
                     <h1>네이버 LED 글 동기화</h1>
                 </div>
                 <a class="button gallery-refresh" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=gallery_naver_refresh'), 'gallery_naver_refresh')); ?>">목록 새로고침</a>
-            </div>
-
-            <div class="gallery-sync-notices">
-            <?php if (is_array($notice)) : ?>
-                <div class="notice notice-<?php echo $notice['errors'] ? 'warning' : 'success'; ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
-            <?php endif; ?>
             </div>
 
             <section class="gallery-sync-section gallery-sync-settings">
@@ -1263,7 +1263,7 @@ PROMPT;
 .gallery-sync-settings .form-table th,
 .gallery-sync-settings label { color: #1d2327; }
 .gallery-sync-admin .gallery-sync-hero h1 { color: #fff; }
-.gallery-sync-notices .notice { margin: 18px 0 0; border: 1px solid #dcdcda; border-left-width: 1px; border-radius: 12px; background: #fff; box-shadow: none; }
+.gallery-sync-notices .notice { margin: 0 0 22px; border: 1px solid #dcdcda; border-left-width: 1px; border-radius: 12px; background: #fff; box-shadow: none; }
 .gallery-sync-notices .notice-success { border-color: #171712; }
 .gallery-sync-notices .notice-success p { color: #171712; font-weight: 600; }
 .gallery-sync-notices .notice-warning { border-color: #a3691c; background: #fdf7ec; }
