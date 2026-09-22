@@ -22,6 +22,18 @@ final class Gallery_Naver_Blog_Sync
 
     private const META_SOURCE_URL = '_gallery_naver_source_url';
 
+    private const QUEUE_OPTION = 'gallery_naver_sync_queue';
+
+    private const CRON_HOOK = 'gallery_naver_sync_queue_cron';
+
+    private const MIN_REQUEST_INTERVAL = 2.5;
+
+    private const BATCH_SIZE = 3;
+
+    private const BLOCK_PAUSE = 30 * MINUTE_IN_SECONDS;
+
+    private static float $last_request_at = 0.0;
+
     public static function boot(): void
     {
         add_action('admin_menu', [self::class, 'register_menu']);
@@ -29,6 +41,9 @@ final class Gallery_Naver_Blog_Sync
         add_action('admin_post_gallery_naver_refresh', [self::class, 'handle_refresh']);
         add_action('admin_enqueue_scripts', [self::class, 'admin_assets']);
         add_filter('upload_mimes', [self::class, 'keep_remote_images_only']);
+        add_action(self::CRON_HOOK, [self::class, 'process_queue']);
+        add_filter('cron_schedules', [self::class, 'register_cron_schedule']);
+        add_action('init', [self::class, 'schedule_cron']);
     }
 
     public static function register_menu(): void
@@ -101,6 +116,17 @@ final class Gallery_Naver_Blog_Sync
                 </div>
                 <a class="button gallery-refresh" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=gallery_naver_refresh'), 'gallery_naver_refresh')); ?>">목록 새로고침</a>
             </div>
+
+            <?php
+            $queue_count = count((array) get_option(self::QUEUE_OPTION, []));
+            $paused = (bool) get_transient('gallery_naver_sync_paused');
+            ?>
+            <?php if ($queue_count > 0) : ?>
+                <div class="notice notice-info"><p>동기화 대기 중인 글이 <?php echo esc_html($queue_count); ?>개 있습니다. 2분 간격으로 자동 게시됩니다.</p></div>
+            <?php endif; ?>
+            <?php if ($paused) : ?>
+                <div class="notice notice-warning"><p>네이버가 요청을 일시 제한했습니다. 약 30분 후에 자동으로 재개됩니다.</p></div>
+            <?php endif; ?>
 
             <?php if (is_array($notice)) : ?>
                 <div class="notice <?php echo $notice['errors'] ? 'notice-warning' : 'notice-success'; ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
@@ -218,6 +244,63 @@ final class Gallery_Naver_Blog_Sync
         exit;
     }
 
+    public static function schedule_cron(): void
+    {
+        if (! wp_next_scheduled(self::CRON_HOOK)) {
+            wp_schedule_event(time() + 120, 'gallery_naver_every_2min', self::CRON_HOOK);
+        }
+    }
+
+    public static function register_cron_schedule($schedules)
+    {
+        $schedules['gallery_naver_every_2min'] = [
+            'interval' => 120,
+            'display' => '네이버 동기화 2분 간격',
+        ];
+
+        return $schedules;
+    }
+
+    public static function process_queue(): void
+    {
+        if (get_transient('gallery_naver_sync_paused')) {
+            return;
+        }
+
+        $queue = array_values(array_filter((array) get_option(self::QUEUE_OPTION, [])));
+        if (! $queue) {
+            return;
+        }
+
+        $done = 0;
+        foreach ($queue as $index => $log_no) {
+            if ($done >= self::BATCH_SIZE) {
+                break;
+            }
+
+            if (self::find_existing_post($log_no)) {
+                unset($queue[$index]);
+                continue;
+            }
+
+            $result = self::sync_post($log_no);
+            unset($queue[$index]);
+            $done++;
+
+            if (is_wp_error($result) && self::is_blocked_error($result)) {
+                set_transient('gallery_naver_sync_paused', time(), self::BLOCK_PAUSE);
+                break;
+            }
+        }
+
+        update_option(self::QUEUE_OPTION, array_values($queue), false);
+    }
+
+    private static function is_blocked_error(WP_Error $error): bool
+    {
+        return in_array($error->get_error_code(), ['blocked', 'http_error'], true);
+    }
+
     public static function handle_sync(): void
     {
         self::assert_admin_request('gallery_naver_sync');
@@ -233,30 +316,21 @@ final class Gallery_Naver_Blog_Sync
             exit;
         }
 
-        $created = 0;
-        $skipped = 0;
-        $errors = [];
-
-        foreach ($selected as $log_no) {
-            if (self::find_existing_post($log_no)) {
-                $skipped++;
-                continue;
-            }
-
-            $result = self::sync_post($log_no);
-            if (is_wp_error($result)) {
-                $errors[] = $result->get_error_message();
-            } else {
-                $created++;
-            }
+        if (get_transient('gallery_naver_sync_paused')) {
+            self::set_notice('네이버가 요청을 일시 차단한 상태입니다. 약 30분 후에 자동으로 재개됩니다.', 1);
+            wp_safe_redirect(self::admin_url());
+            exit;
         }
 
-        delete_transient(self::CACHE_KEY);
-        $message = sprintf('동기화 완료: 새 글 %d개, 중복 건너뜀 %d개', $created, $skipped);
-        if ($errors) {
-            $message .= sprintf(', 실패 %d개. %s', count($errors), implode(' ', $errors));
-        }
-        self::set_notice($message, count($errors));
+        $queue = array_values(array_unique(array_merge(
+            (array) get_option(self::QUEUE_OPTION, []),
+            $selected,
+        )));
+        update_option(self::QUEUE_OPTION, $queue, false);
+        self::schedule_cron();
+
+        $message = sprintf('%d개 글을 동기화 대기열에 추가했습니다. 한 번에 %d개씩, 약 2분 간격으로 자동 게시됩니다.', count($selected), self::BATCH_SIZE);
+        self::set_notice($message, 0);
         wp_safe_redirect(self::admin_url());
         exit;
     }
@@ -306,7 +380,7 @@ final class Gallery_Naver_Blog_Sync
         $posts = [];
         $error = '';
 
-        for ($page = 1; $page <= 100; $page++) {
+        for ($page = 1; $page <= 10; $page++) {
             $page_posts = self::fetch_list_page($page);
             if (is_wp_error($page_posts)) {
                 $error = $page_posts->get_error_message();
@@ -475,23 +549,48 @@ final class Gallery_Naver_Blog_Sync
 
     private static function request(string $url)
     {
+        self::throttle();
+
         $response = wp_safe_remote_get($url, [
             'timeout' => 25,
             'redirection' => 3,
             'headers' => [
-                'User-Agent' => 'Mozilla/5.0',
+                'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
                 'Referer' => 'https://blog.naver.com/' . self::BLOG_ID,
                 'Accept-Language' => 'ko-KR,ko;q=0.9',
             ],
         ]);
+
+        self::$last_request_at = microtime(true);
+        set_transient('gallery_naver_last_request', self::$last_request_at, 10 * MINUTE_IN_SECONDS);
+
         if (is_wp_error($response)) {
             return new WP_Error('network_error', '네이버 연결 실패: ' . $response->get_error_message());
         }
-        if (wp_remote_retrieve_response_code($response) !== 200) {
-            return new WP_Error('http_error', '네이버가 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code === 429 || $code === 403) {
+            set_transient('gallery_naver_sync_paused', time(), self::BLOCK_PAUSE);
+
+            return new WP_Error('blocked', '네이버가 요청을 제한했습니다(HTTP ' . $code . '). 약 30분 후에 자동으로 재개됩니다.');
+        }
+        if ($code !== 200) {
+            return new WP_Error('http_error', '네이버가 요청을 처리하지 못했습니다(HTTP ' . $code . '). 잠시 후 다시 시도해 주세요.');
         }
 
         return $response;
+    }
+
+    private static function throttle(): void
+    {
+        if (self::$last_request_at === 0.0) {
+            self::$last_request_at = (float) get_transient('gallery_naver_last_request');
+        }
+
+        $elapsed = microtime(true) - self::$last_request_at;
+        if ($elapsed < self::MIN_REQUEST_INTERVAL) {
+            usleep((int) ((self::MIN_REQUEST_INTERVAL - $elapsed) * 1_000_000));
+        }
     }
 
     private static function load_document(string $html): ?DOMDocument
