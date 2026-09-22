@@ -28,6 +28,8 @@ services:
 
   database:
     image: mariadb:12
+    volumes:
+      - database-data:/var/lib/mysql
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
@@ -43,3 +45,6 @@ services:
 networks:
   bedrock:
     driver: bridge
+
+volumes:
+  database-data:
