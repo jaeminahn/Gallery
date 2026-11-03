@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 
 export type AdminSection = "sync" | "posts" | "drafts";
 
@@ -10,6 +11,7 @@ const nav: { key: AdminSection; label: string; href: string; hint: string }[] = 
 ];
 
 export function AdminShell({ active, children }: { active: AdminSection; children: React.ReactNode }) {
+  const [loggingOut,setLoggingOut]=useState(false);
   return <div className="admin-shell">
     <aside className="admin-sidebar">
       <strong>갤러리조명</strong>
@@ -21,7 +23,7 @@ export function AdminShell({ active, children }: { active: AdminSection; childre
       </nav>
     </aside>
     <main className="admin-main">
-      <div className="admin-top"><span>갤러리조명 관리자</span><button className="button" onClick={async () => { await fetch("/api/admin/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); location.href = "/admin/login/"; }}>로그아웃</button></div>
+      <div className="admin-top"><span>갤러리조명 관리자</span><button className="admin-logout" disabled={loggingOut} data-pending={loggingOut} onClick={async () => { setLoggingOut(true);try{const res=await fetch("/api/admin/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });if(!res.ok)throw new Error("로그아웃에 실패했습니다.");location.href = "/admin/login/";}catch(e){window.alert(e instanceof Error?e.message:"로그아웃에 실패했습니다.");setLoggingOut(false);}}}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4M19 12H9"/></svg><span>{loggingOut?"로그아웃 중...":"로그아웃"}</span></button></div>
       {children}
     </main>
   </div>;

@@ -21,6 +21,14 @@ create table if not exists public.posts (
 );
 create index if not exists posts_public_order on public.posts(status, published_at desc);
 
+create table if not exists public.post_view_stats (
+  post_id uuid not null references public.posts(id) on delete cascade,
+  view_date date not null default current_date,
+  views integer not null default 0,
+  primary key (post_id, view_date)
+);
+create index if not exists post_view_stats_post on public.post_view_stats(post_id);
+
 create table if not exists public.remote_posts (
   log_no text primary key,
   title text not null,
@@ -57,7 +65,7 @@ create table if not exists public.sync_state (
 insert into public.sync_state(id) values (1) on conflict (id) do nothing;
 
 grant usage on schema public to service_role;
-grant select, insert, update, delete on public.admin_users, public.posts, public.remote_posts, public.sync_queue, public.sync_state to service_role;
+grant select, insert, update, delete on public.admin_users, public.posts, public.remote_posts, public.sync_queue, public.sync_state, public.post_view_stats to service_role;
 
 create or replace function public.claim_next_sync() returns public.sync_queue
 language plpgsql security definer set search_path = public as $$
@@ -86,6 +94,7 @@ alter table public.posts enable row level security;
 alter table public.remote_posts enable row level security;
 alter table public.sync_queue enable row level security;
 alter table public.sync_state enable row level security;
+alter table public.post_view_stats enable row level security;
 -- Server routes use the secret key (which runs as service_role) only after checking Supabase Auth + admin_users.
 -- Public pages are rendered on the server and never receive this key.
 

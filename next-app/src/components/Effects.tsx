@@ -21,10 +21,9 @@ export function Effects() {
       cleanups.push(inView("[data-reveal]", element => { animate(element, { opacity: [0, 1], y: [26, 0] }, { duration: .8, ease: [.22, 1, .36, 1] }); }, { margin: "0px 0px -10% 0px" }));
       cleanups.push(inView("[data-stagger]", element => { animate(Array.from(element.children), { opacity: [0, 1], y: [22, 0] }, { duration: .7, delay: stagger(.09), ease: [.22, 1, .36, 1] }); }, { margin: "0px 0px -8% 0px" }));
     }
-    const canvas = document.getElementById("contact-dots") as HTMLCanvasElement | null;
-    if (canvas) {
+    document.querySelectorAll<HTMLCanvasElement>("canvas.dots-canvas").forEach(canvas => {
       const context = canvas.getContext("2d");
-      const section = canvas.closest(".contact") as HTMLElement | null;
+      const section = canvas.closest("section") as HTMLElement | null;
       if (context && section) {
         let dots: Array<{x:number;y:number}> = [], width = 0, height = 0, visible = false, frame = 0;
         const mouse = { x: -9999, y: -9999 };
@@ -36,7 +35,7 @@ export function Effects() {
         const loop = () => { if (visible) { context.clearRect(0,0,width,height); for(const dot of dots) { const strength = Math.max(0,1-Math.hypot(dot.x-mouse.x,dot.y-mouse.y)/190); context.beginPath(); context.arc(dot.x,dot.y,1+strength*2.4,0,Math.PI*2); context.fillStyle=`rgba(255, 255, 255, ${(0.16+strength*0.84).toFixed(3)})`; context.fill(); } } frame=requestAnimationFrame(loop); }; loop();
         cleanups.push(() => { cancelAnimationFrame(frame); observer.disconnect(); section.removeEventListener("pointermove",move); section.removeEventListener("pointerleave",leave); window.removeEventListener("resize",resize); });
       }
-    }
+    });
     return () => cleanups.forEach(fn => fn());
   }, [pathname]);
   return null;

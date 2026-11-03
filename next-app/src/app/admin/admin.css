@@ -136,10 +136,59 @@
 .gallery-sync-heading p{font-size:13px}
 
 /* 요약 카드(링크) */
-.gallery-sync-summary a{transition:transform .2s ease,box-shadow .2s ease;cursor:pointer}
-.gallery-sync-summary a:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(23,23,18,.08);border-color:#171712}
-.gallery-sync-summary div strong,.gallery-sync-summary a strong{font-size:32px;letter-spacing:-.03em}
-.gallery-sync-summary a span{color:var(--admin-accent);font-weight:600}
+.gallery-sync-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.gallery-sync-summary > :is(a,div){box-sizing:border-box;min-width:0;min-height:132px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:16px;padding:23px 24px;border:1px solid #dcdcda;border-radius:14px;background:#fff;color:#171712;text-decoration:none}
+.gallery-sync-summary strong{display:block;font-size:38px;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.gallery-sync-summary span{display:block;font-size:13px;line-height:1.4;color:#64645d;font-weight:600}
+.gallery-sync-summary > a{position:relative;padding-right:48px;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;cursor:pointer}
+.gallery-sync-summary > a::after{content:"↗";position:absolute;top:20px;right:24px;color:#77776f;font-size:20px;line-height:1}
+.gallery-sync-summary > a:hover,.gallery-sync-summary > a:focus-visible{transform:translateY(-2px);box-shadow:0 8px 24px rgba(23,23,18,.08);border-color:#171712;outline:none}
+.gallery-sync-summary > a:hover::after,.gallery-sync-summary > a:focus-visible::after{color:#171712}
+@media(max-width:782px){.gallery-sync-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.gallery-sync-summary > :is(a,div){min-height:112px;padding:18px}.gallery-sync-summary > a{padding-right:38px}.gallery-sync-summary > a::after{top:16px;right:16px}.gallery-sync-summary > :last-child{grid-column:1/-1;min-height:96px}}
+
+/* 관리자 상단과 편집기 */
+.admin-top .admin-logout{display:inline-flex;align-items:center;gap:9px;min-height:38px;padding:0 13px;border:1px solid transparent;border-radius:10px;background:transparent;color:#52534d;font-size:13px;font-weight:700;cursor:pointer}
+.admin-top .admin-logout:hover,.admin-top .admin-logout:focus-visible{border-color:#e8d4d0;background:#fff2ef;color:#963b30;outline:none}
+.admin-top .admin-logout svg{flex:none}
+.gallery-delete-button,.admin-editor .gallery-delete-button{border-color:#e9c5c1!important;background:#fff7f5!important;color:#a3342a!important}
+.gallery-delete-button:hover:not(:disabled),.admin-editor .gallery-delete-button:hover:not(:disabled){background:#fce8e4!important;border-color:#c86458!important}
+.admin-editor-wrap{max-width:1040px}
+.admin-editor{max-width:none;margin:0;padding:clamp(24px,3vw,40px);border:1px solid #e3e4de;border-radius:20px;box-shadow:0 18px 50px rgba(23,23,18,.055)}
+.admin-editor-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding-bottom:26px;border-bottom:1px solid #e8e8e2}
+.admin-editor-heading h1{margin:4px 0 8px;font-size:30px;line-height:1.2;letter-spacing:-.04em}
+.admin-editor-heading p:last-child{margin:0;color:#77776f;font-size:13px}
+.admin-editor-eyebrow{margin:0;color:#6b7347;font-size:11px;font-weight:800;letter-spacing:.15em}
+.admin-editor-status{flex:none;padding:7px 12px;border-radius:999px;background:#eef2e4;color:#405022;font-size:12px;font-weight:700}
+.admin-editor .admin-editor-field{display:block;margin:26px 0 0;color:#32332e;font-size:13px;font-weight:750}
+.admin-editor .admin-editor-field input,.admin-editor .admin-editor-field textarea,.admin-editor .admin-editor-field select{display:block;width:100%;margin-top:10px;padding:13px 15px;border:1px solid #d6d8d0;border-radius:11px;background:#fcfcfa;color:#252620;font-size:15px;font-weight:400;line-height:1.6;transition:border-color .18s,box-shadow .18s}
+.admin-editor .admin-editor-field textarea{min-height:104px;resize:vertical}
+.admin-editor .admin-editor-field :is(input,textarea,select):focus{border-color:#758d38;outline:none;box-shadow:0 0 0 3px rgba(117,141,56,.13)}
+.admin-editor .admin-editor-status-field select{max-width:260px}
+.admin-editor .md-editor{margin:30px 0 0;border:1px solid #dfe1d9;border-radius:16px;box-shadow:0 8px 26px rgba(23,23,18,.045)}
+.md-editor-heading{display:flex;align-items:baseline;gap:12px;padding:17px 20px 13px;background:#fff}
+.md-editor-heading strong{font-size:14px;color:#252620}
+.md-editor-heading span{font-size:12px;color:#85867d}
+.admin-editor .md-editor-bar{padding:12px 16px;background:#f6f7f2;border-top:1px solid #e6e8df;border-bottom:1px solid #e0e2d9}
+.admin-editor .md-toolbar .button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border:1px solid #d7d9d0;border-radius:8px;background:#fff;color:#44463e;font-size:12px;font-weight:650;cursor:pointer}
+.admin-editor .md-toolbar .button:hover{border-color:#879a62;background:#f4f8e9;color:#263713}
+.admin-editor .md-view-tabs{padding:3px;border:1px solid #d9dcd2;border-radius:10px;background:#e9ece3}
+.admin-editor .md-view-tabs button{min-height:30px;padding:0 14px;border:0;border-radius:7px;background:transparent;color:#62665b;font-size:12px}
+.admin-editor .md-view-tabs button.current{background:#fff;color:#20251b;box-shadow:0 1px 4px rgba(23,23,18,.12)}
+.admin-editor .md-source{min-height:520px;padding:22px 24px;background:#fff;color:#30332b;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.85}
+.admin-editor .md-preview{min-height:520px;padding:28px 32px;background:#fff}
+.admin-editor .admin-editor-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:34px;padding-top:24px;border-top:1px solid #e8e8e2}
+.admin-editor .admin-editor-actions .button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 20px;border:1px solid #c9ccc1;border-radius:10px;background:#fff;color:#252620;font-size:13px;font-weight:700;cursor:pointer}
+.admin-editor .admin-editor-actions .button-primary{border-color:#22271b;background:#22271b;color:#fff}
+@media(max-width:782px){.admin-editor-heading{flex-direction:column;gap:12px}.md-editor-heading{display:block}.md-editor-heading span{display:block;margin-top:4px}.admin-editor .md-source,.admin-editor .md-preview{min-height:380px;padding:18px}.admin-editor .admin-editor-actions{flex-wrap:wrap}.admin-editor .admin-editor-actions .button{flex:1}}
+
+/* 클릭 직후와 서버 요청 중인 버튼의 피드백 */
+.admin-shell button,.admin-login button{transition:opacity .12s ease,transform .12s ease,background-color .12s ease,box-shadow .12s ease}
+.admin-shell button:not(:disabled):active,.admin-login button:not(:disabled):active{opacity:.7;transform:translateY(1px) scale(.985)}
+.admin-shell button:disabled,.admin-login button:disabled{opacity:.55;cursor:not-allowed}
+.admin-shell button[data-pending="true"],.admin-login button[data-pending="true"]{opacity:.76;cursor:progress}
+.admin-shell button[data-pending="true"]::after,.admin-login button[data-pending="true"]::after{content:"";display:inline-block;width:12px;height:12px;margin-left:9px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:admin-button-spin .7s linear infinite}
+@keyframes admin-button-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.admin-shell button,.admin-login button{transition:none}.admin-shell button[data-pending="true"]::after,.admin-login button[data-pending="true"]::after{animation:none}}
 
 /* 목록 행 */
 .gallery-sync-list{border-top:1px solid var(--admin-line)}

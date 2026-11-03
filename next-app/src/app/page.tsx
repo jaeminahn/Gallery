@@ -3,18 +3,28 @@ import { SiteShell } from "@/components/SiteShell";
 import { PostCard } from "@/components/PostCard";
 import { Faq } from "@/components/Faq";
 import { getPublishedPosts } from "@/lib/posts";
+import { siteUrl } from "@/lib/site";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const { posts } = await getPublishedPosts(1, 3);
+  const jsonLd = {
+    "@context": "https://schema.org", "@type": "LocalBusiness",
+    name: "갤러리조명", url: siteUrl(), telephone: "+82-10-4588-8709", email: "luxurylusso@naver.com",
+    image: `${siteUrl()}/assets/images/barrisol-hero.png`,
+    address: { "@type": "PostalAddress", streetAddress: "울산 남구 갈밭로10번길 9", addressLocality: "울산", addressCountry: "KR" },
+    areaServed: ["울산", "부산", "경남"],
+    description: "울산 바리솔, LED 엣지등, 해외 수입 식탁등 전문 시공. 부산 울산 경남 출장 상담 010-4588-8709",
+  };
   return <SiteShell>
+<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}/>
 
 <main>
   <section className="hero" aria-labelledby="hero-title">
     <div className="hero-media"><img src="/assets/images/barrisol-hero.png" alt="바리솔 조명이 설치된 고급 상업 공간"/></div>
     <div className="wrap hero-content">
       <h1 id="hero-title">빛이 머무는<br/>공간을 짓습니다</h1>
-      <p className="hero-lead" data-hero>울산 갤러리조명은 바리솔 제작과 설치, 가정용 LED 엣지등, 해외 수입 식탁등을 전문으로 시공합니다.</p>
+      <p className="hero-lead" data-hero>울산 갤러리조명은 바리솔 제작과 설치,<br/>가정용 LED 엣지등, 해외 수입 식탁등을 전문으로 시공합니다.</p>
       <div className="hero-actions" data-hero>
         <a className="btn btn-light" href="tel:01045888709">010-4588-8709 상담하기</a>
         <a className="btn-link" href="#services">시공 분야 보기 <span aria-hidden="true">&rarr;</span></a>
@@ -26,7 +36,7 @@ export default async function HomePage() {
     <div className="wrap">
       <div className="section-head" data-reveal>
         <h2 className="section-title">좋은 조명은 밝기보다<br/>공간을 먼저 봅니다</h2>
-        <p className="section-copy">같은 평수라도 천장 높이와 마감, 생활 방식에 따라 필요한 빛은 다릅니다. 현장을 살피고 오래 편안한 조명을 제안합니다.</p>
+        <p className="section-copy">같은 평수라도 천장 높이와 마감, 생활 방식에 따라 필요한 빛은 다릅니다.<br/>현장을 살피고 오래 편안한 조명을 제안합니다.</p>
       </div>
       <div className="service-grid" data-stagger>
         <article className="service-card">
@@ -85,7 +95,7 @@ export default async function HomePage() {
     <div className="wrap">
       <div className="section-head" data-reveal>
         <h2 className="section-title">울산에서 시작해<br/>필요한 현장까지</h2>
-        <p className="section-copy">울산 전 지역을 가장 빠르게 방문하며 부산과 경남도 꾸준히 시공합니다. 대형 바리솔과 특수 조명은 타 지역 출장도 협의할 수 있습니다.</p>
+        <p className="section-copy">울산 전 지역을 가장 빠르게 방문하며<br/>부산과 경남도 꾸준히 시공합니다.<br/>대형 바리솔과 특수 조명은 타 지역 출장도 협의할 수 있습니다.</p>
       </div>
       <div className="area-list" data-stagger>
         <div className="area-item"><strong>울산</strong><p>남구, 중구, 동구, 북구, 울주군의 아파트, 주택, 병원, 상가와 기관</p></div>
@@ -111,11 +121,11 @@ export default async function HomePage() {
   </section>
 
   <section className="section contact" id="contact">
-    <canvas className="contact-dots" id="contact-dots" aria-hidden="true"/>
+    <canvas className="contact-dots dots-canvas" aria-hidden="true"/>
     <div className="wrap contact-layout" data-reveal>
       <div>
         <h2 className="section-title">어떤 공간인지 알려주세요.<br/>빛의 답을 함께 찾겠습니다.</h2>
-      <p className="section-copy">사진과 지역, 교체하고 싶은 조명을 문자로 보내주시면 상담이 더 빠릅니다.</p>
+      <p className="section-copy">사진과 지역, 교체하고 싶은 조명을 문자로 보내주시면<br/>상담이 더 빠릅니다.</p>
       <div className="contact-actions">
         <a className="btn btn-light" href="tel:01045888709">010-4588-8709 전화하기</a>
         <a className="btn-link btn-link-light" href="https://blog.naver.com/luxurylusso" target="_blank" rel="noopener noreferrer">네이버 블로그 <span aria-hidden="true">&rarr;</span></a>
