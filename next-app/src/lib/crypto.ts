@@ -1,0 +1,4 @@
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:crypto";
+function key() { const secret = process.env.APP_ENCRYPTION_KEY; if (!secret) throw new Error("APP_ENCRYPTION_KEY가 설정되지 않았습니다."); return createHash("sha256").update(secret).digest(); }
+export function encrypt(value: string) { const iv=randomBytes(12), cipher=createCipheriv("aes-256-gcm",key(),iv); const encrypted=Buffer.concat([cipher.update(value,"utf8"),cipher.final()]); return Buffer.concat([iv,cipher.getAuthTag(),encrypted]).toString("base64"); }
+export function decrypt(value: string) { const buf=Buffer.from(value,"base64"), decipher=createDecipheriv("aes-256-gcm",key(),buf.subarray(0,12)); decipher.setAuthTag(buf.subarray(12,28)); return Buffer.concat([decipher.update(buf.subarray(28)),decipher.final()]).toString("utf8"); }

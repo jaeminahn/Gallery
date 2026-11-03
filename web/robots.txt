@@ -1,6 +1,0 @@
-User-agent: *
-Disallow: /wp-admin/
-Allow: /wp-admin/admin-ajax.php
-Disallow: /wp/
-Disallow: /app/
-Sitemap: https://gallery-lighting.local/wp-sitemap.xml
