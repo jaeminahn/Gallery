@@ -9,7 +9,13 @@ export function sourceUrl(logNo: string) { return `https://blog.naver.com/PostVi
 const clean = (value: string) => value.replace(/\s+/g," ").trim();
 function decodeTitle(value:string) { try { return decodeURIComponent(value.replace(/\+/g," ")); } catch { return value; } }
 export function normalizeImageUrl(input: string) {
-  try { const url=new URL(input.replace(/&amp;/g,"&")); if(url.protocol!=="https:" || !/^(postfiles|blogfiles|storep-phinf|blogthumb)\.pstatic\.net$/.test(url.hostname)) return ""; if(url.hostname === "blogthumb.pstatic.net") url.searchParams.set("type","w966"); else url.searchParams.delete("type"); return url.toString(); } catch { return ""; }
+  try {
+    const url=new URL(input.replace(/&amp;/g,"&"));
+    if(url.protocol!=="https:" || !/^(postfiles|blogfiles|storep-phinf|blogthumb)\.pstatic\.net$/.test(url.hostname)) return "";
+    if(url.hostname === "postfiles.pstatic.net" || url.hostname === "blogfiles.pstatic.net") url.searchParams.set("type","w2000");
+    else if(url.hostname === "blogthumb.pstatic.net") url.searchParams.set("type","w966");
+    return url.toString();
+  } catch { return ""; }
 }
 export async function naverRequest(url: string, interval = 2500, lastRequest = 0): Promise<{ html: string; requestedAt: number }> {
   const delay=Math.max(0,interval-(Date.now()-lastRequest)); if(delay) await new Promise(resolve=>setTimeout(resolve,delay));

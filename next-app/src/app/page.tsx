@@ -58,6 +58,10 @@ export default async function HomePage() {
           <p>루이스폴센을 비롯한 수입 펜던트와 직구 조명의 조립, 천장 보강, 높이 조절, 전선 수리와 설치를 섬세하게 마무리합니다.</p>
         </article>
       </div>
+      <div className="service-choice" data-reveal>
+        <h3>어떤 조명이 필요한가요?</h3>
+        <p>넓은 천장을 고르게 밝히고 싶다면 바리솔 면조명, 기존 거실·방 조명을 얇게 교체하려면 LED 엣지등을 살펴보세요. 식탁 위 포인트 조명은 펜던트의 높이와 천장 구조를 확인한 뒤 설치 방법을 정합니다.</p>
+      </div>
     </div>
   </section>
 
@@ -81,6 +85,7 @@ export default async function HomePage() {
     <div className="wrap">
       <div className="section-head" data-reveal>
         <h2 className="section-title">문의부터 점등까지<br/>꼼꼼하게 이어갑니다</h2>
+        <p className="section-copy">상담할 때 지역과 설치 공간, 현재 조명 사진을 알려주시면 현장 확인에 필요한 내용을 빠르게 정리할 수 있습니다.</p>
       </div>
       <div className="process-grid" data-stagger>
         <article className="process-card"><span>01</span><h3>전화 상담</h3><p>지역과 공간, 교체할 조명, 불편한 점을 편하게 말씀해 주세요.</p></article>

@@ -44,7 +44,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   };
   return <SiteShell><main className="single-post"><article className="article"><div className="wrap">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}/>
-    <nav className="article-nav" aria-label="글 탐색"><Link className="btn-link" href="/blog/"><span aria-hidden="true">&larr;</span> 시공 기록 목록</Link><span className="article-nav-label">갤러리조명 시공 기록</span></nav>
+    <nav className="article-nav" aria-label="글 탐색"><Link className="btn-link" href="/blog/"><span aria-hidden="true">&larr;</span> 시공 기록 목록</Link></nav>
     <header className="article-header"><div className="article-meta">{new Date(post.published_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}</div><h1>{post.title}</h1></header>
     <div className="article-body" dangerouslySetInnerHTML={{ __html: post.content_html }}/>
     <footer className="article-footer"><div className="article-share"><span>이 글이 도움이 되었다면<br/>주변에 알려주세요.</span><ShareButton title={post.title}/></div>
