@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Effects } from "./Effects";
+import { CallLink } from "./CallLink";
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return <>
@@ -8,7 +9,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
       <nav className="nav-links" aria-label="주 메뉴">
         <Link href="/#services">전문 시공</Link><Link href="/#barrisol">바리솔</Link>
         <Link href="/#area">출장 지역</Link><Link href="/blog/">시공 기록</Link>
-        <a className="nav-call" href="tel:01045888709">전화 상담</a>
+        <CallLink className="nav-call">전화 상담</CallLink>
       </nav>
     </div></header>
     {children}
@@ -20,7 +21,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
       </div>
       <div className="footer-bottom">© {new Date().getFullYear()} 갤러리조명. 현장과 공간에 맞는 정직한 시공을 약속드립니다.</div>
     </div></footer>
-    <a className="mobile-call" href="tel:01045888709">지금 전화 상담 010-4588-8709</a>
+    <CallLink className="mobile-call">지금 전화 상담 010-4588-8709</CallLink>
     <Effects />
   </>;
 }

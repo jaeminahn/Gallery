@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiteShell } from "@/components/SiteShell";
+import { CallLink } from "@/components/CallLink";
 import { PostCard } from "@/components/PostCard";
 import { Faq } from "@/components/Faq";
 import { getPublishedPosts } from "@/lib/posts";
@@ -26,7 +27,7 @@ export default async function HomePage() {
       <h1 id="hero-title">빛이 머무는<br/>공간을 짓습니다</h1>
       <p className="hero-lead" data-hero>울산 갤러리조명은 바리솔 제작과 설치,<br/>가정용 LED 엣지등, 해외 수입 식탁등을 전문으로 시공합니다.</p>
       <div className="hero-actions" data-hero>
-        <a className="btn btn-light" href="tel:01045888709">010-4588-8709 상담하기</a>
+        <CallLink className="btn btn-light">010-4588-8709 상담하기</CallLink>
         <a className="btn-link" href="#services">시공 분야 보기 <span aria-hidden="true">&rarr;</span></a>
       </div>
     </div>
@@ -132,7 +133,7 @@ export default async function HomePage() {
         <h2 className="section-title">어떤 공간인지 알려주세요.<br/>빛의 답을 함께 찾겠습니다.</h2>
       <p className="section-copy">사진과 지역, 교체하고 싶은 조명을 문자로 보내주시면<br/>상담이 더 빠릅니다.</p>
       <div className="contact-actions">
-        <a className="btn btn-light" href="tel:01045888709">010-4588-8709 전화하기</a>
+        <CallLink className="btn btn-light">010-4588-8709 전화하기</CallLink>
         <a className="btn-link btn-link-light" href="https://blog.naver.com/luxurylusso" target="_blank" rel="noopener noreferrer">네이버 블로그 <span aria-hidden="true">&rarr;</span></a>
         </div>
       </div>

@@ -6,6 +6,15 @@ import { animate, inView, stagger, scroll } from "motion";
 export function Effects() {
   const pathname = usePathname();
   useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    // Wait until the destination page has rendered before scrolling to its section.
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pathname]);
+  useEffect(() => {
     const header = document.querySelector("#site-header");
     const updateHeader = () => header?.classList.toggle("is-scrolled", window.scrollY > 24);
     updateHeader();

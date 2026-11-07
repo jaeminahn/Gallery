@@ -56,6 +56,17 @@ section[id], [id="services"], [id="barrisol"], [id="area"], [id="journal"], [id=
 .site-header.is-scrolled .nav-call { background: var(--ink); color: #fff; }
 .nav-call:hover { opacity: .82 !important; }
 
+.call-dialog { position: fixed; inset: 0; width: min(calc(100% - 40px), 380px); max-height: calc(100dvh - 40px); margin: auto; padding: 34px 32px 30px; border: 0; border-radius: 20px; background: #fff; color: var(--ink); text-align: center; font-family: var(--sans); box-shadow: 0 24px 70px rgba(0, 0, 0, .25); }
+.call-dialog::backdrop { background: rgba(16, 15, 14, .72); }
+body:has(.call-dialog[open]) { overflow: hidden; }
+.call-dialog .call-title { margin: 0; font-size: 26px; line-height: 1.3; }
+.call-dialog .call-description { margin: 12px 0 22px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.call-close { position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--ink); font-size: 28px; line-height: 1; cursor: pointer; }
+.call-close:hover { background: var(--paper); }
+.call-qr { width: min(100%, 280px); height: auto; margin: 0 auto; }
+.call-dialog .call-number { display: inline-block; margin-top: 18px; font-size: 21px; font-weight: 700; opacity: 1; }
+.call-number:hover { text-decoration: underline; }
+
 /* Single posts start on a light background, so keep the fixed header legible. */
 body:has(.single-post) .site-header:not(.is-scrolled) { color: var(--ink); }
 

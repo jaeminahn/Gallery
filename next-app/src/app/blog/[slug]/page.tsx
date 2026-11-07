@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SiteShell } from "@/components/SiteShell";
 import { ShareButton } from "@/components/ShareButton";
+import { CallLink } from "@/components/CallLink";
 import { getPublishedPost, recordPostView } from "@/lib/posts";
 import { serviceDb } from "@/lib/supabase";
 import { siteUrl } from "@/lib/site";
@@ -49,7 +50,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
     <div className="article-body" dangerouslySetInnerHTML={{ __html: post.content_html }}/>
     <footer className="article-footer"><div className="article-share"><span>이 글이 도움이 되었다면<br/>주변에 알려주세요.</span><ShareButton title={post.title}/></div>
       <nav className="article-pager" aria-label="이전/다음 글"><div className="article-pager-item"><span className="article-pager-label">이전 글</span>{previous ? <Link href={`/blog/${previous.slug}/`}>{previous.title}</Link> : <span className="article-pager-empty">가장 오래된 글입니다</span>}</div><div className="article-pager-item article-pager-next"><span className="article-pager-label">다음 글</span>{next ? <Link href={`/blog/${next.slug}/`}>{next.title}</Link> : <span className="article-pager-empty">가장 최근 글입니다</span>}</div></nav>
-      <div className="article-cta"><h2>비슷한 고민이 있으신가요?</h2><p>사진과 지역을 문자로 보내주시면<br/>빠르게 상담해 드립니다.</p><a className="btn btn-light" href="tel:01045888709">010-4588-8709 전화하기</a></div>
+      <div className="article-cta"><h2>비슷한 고민이 있으신가요?</h2><p>사진과 지역을 문자로 보내주시면<br/>빠르게 상담해 드립니다.</p><CallLink className="btn btn-light">010-4588-8709 전화하기</CallLink></div>
     </footer>
   </div></article></main></SiteShell>;
 }
