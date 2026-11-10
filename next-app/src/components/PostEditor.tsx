@@ -15,6 +15,29 @@ const toolbar: { label: string; before: string; after: string; placeholder: stri
   { label: "인용", before: "\n> ", after: "", placeholder: "인용문" },
 ];
 
+type EditorPart = { kind: "text" | "image"; value: string; start: number; end: number; src?: string };
+function editorParts(markdown: string): EditorPart[] {
+  const parts: EditorPart[] = [];
+  const pattern = /\[?!\[[^\]]*\]\((?:<[^>]+>|[^\s)]+)(?:\s+["'][^"']*["'])?\)(?:\]\([^\s)]+\))?|<img\b[^>]*>/gi;
+  let last = 0;
+  for (const match of markdown.matchAll(pattern)) {
+    const start = match.index;
+    const rendered = markdownToHtml(match[0]);
+    const src = rendered.match(/<img\b[^>]*\bsrc="([^"]+)"/i)?.[1]?.replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    if (!src) continue;
+    parts.push({ kind: "text", value: markdown.slice(last, start), start: last, end: start });
+    parts.push({ kind: "image", value: match[0], start, end: start + match[0].length, src });
+    last = start + match[0].length;
+  }
+  parts.push({ kind: "text", value: markdown.slice(last), start: last, end: markdown.length });
+  return parts;
+}
+
+function resizeTextarea(element: HTMLTextAreaElement) {
+  element.style.height = "auto";
+  element.style.height = `${Math.max(70, element.scrollHeight)}px`;
+}
+
 export function PostEditor({ post }: { post: Post }) {
   const router = useRouter();
   const [title, setTitle] = useState(post.title);
@@ -29,19 +52,21 @@ export function PostEditor({ post }: { post: Post }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
   const preview = useMemo(() => markdownToHtml(markdown), [markdown]);
-  const images = useMemo(() => [...preview.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)].map(match => match[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"')).filter((src, index, all) => all.indexOf(src) === index), [preview]);
+  const parts = useMemo(() => editorParts(markdown), [markdown]);
 
   const wrapSelection = (item: (typeof toolbar)[number]) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    const start = textarea.selectionStart, end = textarea.selectionEnd;
+    const offset = Number(textarea.dataset.start || 0);
+    const start = offset + textarea.selectionStart, end = offset + textarea.selectionEnd;
     const selected = markdown.slice(start, end) || item.placeholder;
     const next = markdown.slice(0, start) + item.before + selected + item.after + markdown.slice(end);
     setMarkdown(next);
     requestAnimationFrame(() => {
       textarea.focus();
-      const cursor = start + item.before.length + selected.length + item.after.length;
+      const cursor = textarea.selectionStart + item.before.length + selected.length + item.after.length;
       textarea.setSelectionRange(cursor, cursor);
+      resizeTextarea(textarea);
     });
   };
 
@@ -67,14 +92,15 @@ export function PostEditor({ post }: { post: Post }) {
       <label className="admin-editor-field">썸네일 이미지 URL<input type="url" value={firstImage} onChange={e => setFirstImage(e.target.value)} placeholder="https://example.com/image.jpg" /></label>
       {firstImage && <div className="admin-thumbnail-preview"><img src={firstImage} alt="현재 썸네일 미리보기" referrerPolicy="no-referrer" /></div>}
       <div className="md-editor">
-        <div className="md-editor-heading"><strong>본문</strong><span>마크다운으로 작성하고 미리보기로 확인하세요.</span></div>
+        <div className="md-editor-heading"><strong>본문</strong><span>이미지는 본문 위치에 표시됩니다. 텍스트를 직접 수정하세요.</span></div>
         <div className="md-editor-bar">
           <div className="md-toolbar" role="toolbar" aria-label="서식">{toolbar.map(item => <button key={item.label} type="button" className="button" disabled={view==="preview"} onClick={() => wrapSelection(item)}>{item.label}</button>)}</div>
           <div className="md-view-tabs" role="tablist">{(["edit", "preview"] as const).map(v => <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "current" : ""} onClick={() => setView(v)}>{v === "edit" ? "편집" : "미리보기"}</button>)}</div>
         </div>
-        {images.length > 0 && <div className="md-image-gallery" aria-label="본문 이미지"><strong>본문 이미지 ({images.length})</strong><div className="md-image-gallery-grid">{images.map((src, index) => <div className="md-image-gallery-item" key={src}><img src={src} alt={`본문 이미지 ${index + 1}`} loading="lazy" referrerPolicy="no-referrer" /><button type="button" className="button" onClick={() => setFirstImage(src)}>썸네일로 설정</button></div>)}</div></div>}
         {view === "edit"
-          ? <textarea ref={textareaRef} className="md-source" value={markdown} onChange={e => setMarkdown(e.target.value)} aria-label="본문 마크다운" />
+          ? <div className="md-inline-editor">{parts.map((part, index) => part.kind === "text"
+            ? <textarea key={index} data-start={part.start} ref={element => { if (element) resizeTextarea(element); }} className="md-source md-text-part" value={part.value} onFocus={e => { textareaRef.current = e.currentTarget; }} onChange={e => setMarkdown(markdown.slice(0, part.start) + e.target.value + markdown.slice(part.end))} aria-label={`본문 텍스트 ${Math.floor(index / 2) + 1}`} />
+            : <div key={index} className="md-inline-image"><img src={part.src} alt={`본문 이미지 ${Math.ceil(index / 2)}`} loading="lazy" referrerPolicy="no-referrer" /><div className="md-inline-image-actions"><button type="button" onClick={() => setFirstImage(part.src || "")}>썸네일로 설정</button><button type="button" onClick={() => { const url = window.prompt("이미지 URL", part.src); if (url === null || url === part.src) return; if (!/^https?:\/\//i.test(url.trim())) { window.alert("http 또는 https 이미지 주소를 입력해 주세요."); return; } const next = url.trim(); const replacement = part.value.startsWith("<img") ? `![](${next})` : part.value.replace(/(!\[[^\]]*\]\()(?:<[^>]+>|[^\s)]+)(\))/, `$1${next}$2`); setMarkdown(markdown.slice(0, part.start) + replacement + markdown.slice(part.end)); if (firstImage === part.src) setFirstImage(next); }}>이미지 주소 변경</button><button type="button" onClick={() => setMarkdown(markdown.slice(0, part.start) + markdown.slice(part.end))}>이미지 삭제</button></div></div>)}</div>
           : <div className="md-preview article-body" dangerouslySetInnerHTML={{ __html: preview }} />}
       </div>
       <label className="admin-editor-field admin-editor-status-field">게시 상태<select value={status} onChange={e => setStatus(e.target.value as Post["status"])}><option value="draft">임시글</option><option value="publish">공개</option><option value="pending">승인 대기</option><option value="private">비공개</option></select></label>
