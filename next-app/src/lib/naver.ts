@@ -44,10 +44,10 @@ export function parseListHtml(html:string,page:number):RemotePost[] {
 export async function fetchRssThumbnails():Promise<Record<string,string>> {
   const {html}=await naverRequest(`https://rss.blog.naver.com/${BLOG_ID}.xml`,350);
   const $=load(html,{xmlMode:true}), map:Record<string,string>={};
-  $("item").each((_,item)=>{ const link=$(item).find("link").first().text(); const logNo=link.match(/\/(\d{8,20})(?:[?/]|$)/)?.[1]; const description=$(item).find("description").first().text(); const match=description.match(/https?:\/\/[^"'\s]+?pstatic\.net\/[^"'\s]+?\.(?:jpe?g|png|gif)[^"'\s]*/i); if(logNo&&match){const url=normalizeImageUrl(match[0]);if(url)map[logNo]=url;} });
+  $("item").each((_,item)=>{ const link=$(item).find("link").first().text(); const logNo=link.match(/\/(\d{8,20})(?:[?/]|$)/)?.[1]; const description=$(item).find("description").first().text(); const match=description.match(/https?:\/\/(?:postfiles|blogfiles)\.pstatic\.net\/[^"'\s]+?\.(?:jpe?g|png|gif)[^"'\s]*/i); if(logNo&&match){const url=normalizeImageUrl(match[0]);if(url)map[logNo]=url;} });
   return map;
 }
-export type NaverContent = { title:string; content:string; excerpt:string; firstImage:string; publishedAt:string };
+export type NaverContent = { title:string; content:string; excerpt:string; firstImage:string };
 export async function fetchRemotePost(logNo: string, lastRequest = 0): Promise<{ post:NaverContent; requestedAt:number }> {
   if(!/^\d{8,20}$/.test(logNo)) throw new NaverError("invalid_log_no","올바르지 않은 네이버 글 번호입니다.");
   const { html,requestedAt }=await naverRequest(sourceUrl(logNo),2500,lastRequest);
@@ -58,12 +58,10 @@ export function parsePostHtml(html:string,logNo:string):NaverContent {
   if(!main.length) throw new NaverError("content_missing","네이버 글 본문을 찾지 못했습니다.");
   const title=clean(($('meta[property="og:title"]').attr("content")||$(".se-title-text").first().text()||`네이버 블로그 글 ${logNo}`).replace(/\s*:\s*네이버 블로그\s*$/u,""));
   main.find("script,style,button").remove(); let firstImage="";
-  main.find("img").each((_,element)=>{ const image=$(element), parent=image.parent(); let src=""; try { src=JSON.parse(parent.attr("data-linkdata")||"{}").src||""; } catch {} src=normalizeImageUrl(src||image.attr("data-lazy-src")||image.attr("src")||""); const width=Number(image.attr("data-width")||0),height=Number(image.attr("data-height")||0); if(!src||(width>0&&height>0&&Math.max(width,height)<220)){image.remove();return;} if(!firstImage&&src.includes("postfiles.pstatic.net")) firstImage=src; image.attr({src,loading:"lazy",decoding:"async",referrerpolicy:"no-referrer"}); for(const attr of ["id","data-lazy-src","data-width","data-height","class","style"]) image.removeAttr(attr); });
+  main.find("img").each((_,element)=>{ const image=$(element), parent=image.parent(); let src=""; try { src=JSON.parse(parent.attr("data-linkdata")||"{}").src||""; } catch {} src=normalizeImageUrl(src||image.attr("data-lazy-src")||image.attr("src")||""); const width=Number(image.attr("data-width")||0),height=Number(image.attr("data-height")||0); if(image.closest(".se-sticker,.se-emoticon,.se-emoji,[class*='sticker'],[class*='emoticon']").length||!src||!new URL(src).hostname.match(/^(postfiles|blogfiles)\.pstatic\.net$/)||(width>0&&height>0&&Math.max(width,height)<220)){image.remove();return;} if(!firstImage) firstImage=src; image.attr({src,loading:"lazy",decoding:"async",referrerpolicy:"no-referrer"}); for(const attr of ["id","data-lazy-src","data-width","data-height","class","style"]) image.removeAttr(attr); });
   main.find("*").each((_,el)=>{ const node=$(el); for(const attr of ["onclick","data-linkdata","data-linktype","area-hidden","data-module-v2"]) node.removeAttr(attr); });
   const content=sanitizeContent(`<div class="naver-post-content">${main.html()||""}</div>`);
   const excerpt=clean($("<div>").html(content).text()).split(" ").slice(0,32).join(" ")+"...";
-  const date=clean($(".se_publishDate").first().text()); const match=date.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})(?:\.\s*(\d{1,2}):(\d{2}))?/);
-  const publishedAt=match ? new Date(`${match[1]}-${match[2].padStart(2,"0")}-${match[3].padStart(2,"0")}T${(match[4]||"09").padStart(2,"0")}:${match[5]||"00"}:00+09:00`).toISOString() : new Date().toISOString();
-  return {title,content,excerpt,firstImage,publishedAt};
+  return {title,content,excerpt,firstImage};
 }
 export function sanitizeContent(html:string) { return sanitizeHtml(html,{ allowedTags:[...sanitizeHtml.defaults.allowedTags,"img","figure","figcaption","div","span"], allowedAttributes:{ a:["href","title","target","rel","class"], img:["src","alt","title","width","height","loading","decoding","referrerpolicy"], div:["class","style"], span:["class","style"], p:["class","style"], figure:["class","style"], figcaption:["class"] }, allowedSchemes:["http","https","mailto","tel"] }); }

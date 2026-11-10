@@ -4,7 +4,6 @@ import sanitizeHtml from "sanitize-html";
 
 export function htmlToMarkdown(html: string): string {
   const service = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-", emDelimiter: "*" });
-  service.keep(["figure", "figcaption"]);
   service.addRule("image", {
     filter: "img",
     replacement: (_content, node) => {

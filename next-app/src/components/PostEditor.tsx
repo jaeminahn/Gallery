@@ -20,6 +20,7 @@ export function PostEditor({ post }: { post: Post }) {
   const [title, setTitle] = useState(post.title);
   const [markdown, setMarkdown] = useState(() => htmlToMarkdown(post.content_html));
   const [excerpt, setExcerpt] = useState(post.excerpt);
+  const [firstImage, setFirstImage] = useState(post.first_image || "");
   const [status, setStatus] = useState(post.status);
   const [savedStatus, setSavedStatus] = useState(post.status);
   const [saving, setSaving] = useState(false);
@@ -28,6 +29,7 @@ export function PostEditor({ post }: { post: Post }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
   const preview = useMemo(() => markdownToHtml(markdown), [markdown]);
+  const images = useMemo(() => [...preview.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)].map(match => match[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"')).filter((src, index, all) => all.indexOf(src) === index), [preview]);
 
   const wrapSelection = (item: (typeof toolbar)[number]) => {
     const textarea = textareaRef.current;
@@ -52,7 +54,7 @@ export function PostEditor({ post }: { post: Post }) {
       savingRef.current = true;
       setSaving(true);
       try {
-        const res = await fetch("/api/admin/post-save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: post.id, title, content_html: markdownToHtml(markdown), excerpt, status }) });
+        const res = await fetch("/api/admin/post-save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: post.id, title, content_html: markdownToHtml(markdown), excerpt, first_image: firstImage, status }) });
         if (!res.ok) throw new Error((await res.json()).error || "저장에 실패했습니다.");
         setSavedStatus(status);
         window.alert(status === "publish" ? "저장하고 공개했습니다." : "저장했습니다. 방문자에게는 보이지 않습니다.");
@@ -62,12 +64,15 @@ export function PostEditor({ post }: { post: Post }) {
       <header className="admin-editor-heading"><div><p className="admin-editor-eyebrow">CONTENT EDITOR</p><h1>게시글 편집</h1><p>내용을 다듬은 뒤 저장하세요. 공개 상태는 아래에서 변경할 수 있습니다.</p></div><span className="admin-editor-status">{savedStatus==="publish"?"공개 중":"비공개 상태"}</span></header>
       <label className="admin-editor-field">제목<input value={title} onChange={e => setTitle(e.target.value)} required placeholder="게시글 제목" /></label>
       <label className="admin-editor-field">요약<textarea value={excerpt} onChange={e => setExcerpt(e.target.value)} placeholder="목록과 검색 결과에 보일 간단한 소개" /></label>
+      <label className="admin-editor-field">썸네일 이미지 URL<input type="url" value={firstImage} onChange={e => setFirstImage(e.target.value)} placeholder="https://example.com/image.jpg" /></label>
+      {firstImage && <div className="admin-thumbnail-preview"><img src={firstImage} alt="현재 썸네일 미리보기" referrerPolicy="no-referrer" /></div>}
       <div className="md-editor">
         <div className="md-editor-heading"><strong>본문</strong><span>마크다운으로 작성하고 미리보기로 확인하세요.</span></div>
         <div className="md-editor-bar">
           <div className="md-toolbar" role="toolbar" aria-label="서식">{toolbar.map(item => <button key={item.label} type="button" className="button" disabled={view==="preview"} onClick={() => wrapSelection(item)}>{item.label}</button>)}</div>
           <div className="md-view-tabs" role="tablist">{(["edit", "preview"] as const).map(v => <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "current" : ""} onClick={() => setView(v)}>{v === "edit" ? "편집" : "미리보기"}</button>)}</div>
         </div>
+        {images.length > 0 && <div className="md-image-gallery" aria-label="본문 이미지"><strong>본문 이미지 ({images.length})</strong><div className="md-image-gallery-grid">{images.map((src, index) => <div className="md-image-gallery-item" key={src}><img src={src} alt={`본문 이미지 ${index + 1}`} loading="lazy" referrerPolicy="no-referrer" /><button type="button" className="button" onClick={() => setFirstImage(src)}>썸네일로 설정</button></div>)}</div></div>}
         {view === "edit"
           ? <textarea ref={textareaRef} className="md-source" value={markdown} onChange={e => setMarkdown(e.target.value)} aria-label="본문 마크다운" />
           : <div className="md-preview article-body" dangerouslySetInnerHTML={{ __html: preview }} />}
