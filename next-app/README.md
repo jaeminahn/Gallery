@@ -4,7 +4,7 @@
 
 ## 설정
 
-1. Supabase 프로젝트를 만들고 `supabase/schema.sql`을 SQL Editor에서 실행합니다.
+1. Supabase 프로젝트를 만들고 `supabase/schema.sql`을 SQL Editor에서 실행합니다. 기존 프로젝트도 변경된 SQL의 `storage.buckets` 구문을 한 번 실행해 공개 `post-images` 버킷을 만들어야 합니다.
 2. Supabase Auth에서 관리자 사용자를 만들고 `admin_users`에 해당 UUID를 추가합니다. SQL 파일 끝에 예시가 있습니다.
 3. 이 디렉터리의 `.env.local`에 Supabase 프로젝트 값을 입력합니다. 변수 목록은 `.env.example`에도 있으며, `.env.local`은 Git에 포함되지 않습니다.
 
@@ -21,6 +21,8 @@
 5. Vercel의 Root Directory를 `next-app`으로 지정하고 같은 환경 변수를 등록합니다.
 
 동기화는 관리자 페이지가 열린 동안 실행됩니다. 네이버 목록을 한 페이지씩 확인하고 글을 한 건씩 가져와 AI 재작성 후 게시합니다. Cron은 사용하지 않습니다.
+
+글 동기화 및 관리자 저장 시 네이버 본문 사진과 썸네일은 `post-images` 버킷으로 복사됩니다. 기존 글의 네이버 사진 주소는 첫 방문 때 `/api/post-image`를 통해 같은 버킷에 복사되어 이후 모든 기기에서 동일한 주소로 제공됩니다.
 
 ## 점검
 

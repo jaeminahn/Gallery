@@ -11,6 +11,7 @@ import type { Post } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 function stripHtml(html: string) { return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(); }
+function articleImage(url: string | null) { return url ? new URL(url, siteUrl()).toString() : `${siteUrl()}/assets/images/barrisol-hero.png`; }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const post = await getPublishedPost((await params).slug);
@@ -21,8 +22,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title: post.title,
     description,
     alternates: { canonical: url },
-    openGraph: { type: "article", url, title: post.title, description, images: post.first_image ? [post.first_image] : [`${siteUrl()}/assets/images/barrisol-hero.png`], publishedTime: post.published_at, modifiedTime: post.updated_at },
-    twitter: { card: "summary_large_image", title: post.title, description, images: post.first_image ? [post.first_image] : [`${siteUrl()}/assets/images/barrisol-hero.png`] },
+    openGraph: { type: "article", url, title: post.title, description, images: [articleImage(post.first_image)], publishedTime: post.published_at, modifiedTime: post.updated_at },
+    twitter: { card: "summary_large_image", title: post.title, description, images: [articleImage(post.first_image)] },
   };
 }
 
@@ -37,7 +38,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   const description = post.excerpt || stripHtml(post.content_html).slice(0, 155);
   const jsonLd = {
     "@context": "https://schema.org", "@type": "Article",
-    headline: post.title, description, image: post.first_image ? [post.first_image] : [`${siteUrl()}/assets/images/barrisol-hero.png`],
+    headline: post.title, description, image: [articleImage(post.first_image)],
     datePublished: post.published_at, dateModified: post.updated_at,
     mainEntityOfPage: url, inLanguage: "ko-KR",
     author: { "@type": "Organization", name: "갤러리조명", url: siteUrl() },

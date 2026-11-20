@@ -1,6 +1,11 @@
 -- Run in the Supabase SQL editor before connecting the Next.js app.
 create extension if not exists pgcrypto;
 
+-- Public article images are copied from Naver so every device uses one stable URL.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('post-images', 'post-images', true, 15728640, array['image/jpeg','image/png','image/gif','image/webp','image/avif'])
+on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
 create table if not exists public.admin_users (
   user_id uuid primary key references auth.users(id) on delete cascade
 );
